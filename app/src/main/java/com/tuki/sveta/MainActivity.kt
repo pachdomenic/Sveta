@@ -4,28 +4,41 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.lifecycleScope
+import com.tuki.sveta.service.MonitorService
+import com.tuki.sveta.service.ScheduleRefreshWorker
+import com.tuki.sveta.ui.SvetaRoot
 import com.tuki.sveta.ui.theme.SvetaTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        container.notifications.ensureChannels()
+        ScheduleRefreshWorker.schedule(this)
         setContent {
             SvetaTheme {
-                Surface(Modifier.fillMaxSize()) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(stringResource(R.string.app_name), style = MaterialTheme.typography.displayMedium)
-                    }
-                }
+                SvetaRoot(container)
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val app = container
+        // The visible UI keeps its own hold on the station link, so data is live even with monitoring off.
+        app.ecoflow.acquire()
+        lifecycleScope.launch { app.schedule.refresh(app.settings.settings.value.group) }
+        // The system may have killed the service; an open activity is always allowed to bring it back.
+        if (app.settings.settings.value.monitoring && !MonitorService.isRunning.value) {
+            MonitorService.startIfAllowed(this)
+        }
+    }
+
+    override fun onStop() {
+        container.ecoflow.release()
+        super.onStop()
     }
 }
