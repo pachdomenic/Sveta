@@ -80,18 +80,33 @@ class EcoflowRepository(
     private val lock = Any()
     private var holders = 0
     private var job: Job? = null
+    private var pendingStop: Job? = null
     /** Bumped to force a fresh login, e.g. after the password was changed. */
     private val restart = MutableStateFlow(0)
 
     fun acquire() = synchronized(lock) {
-        if (holders++ == 0) job = scope.launch { run() }
+        holders++
+        pendingStop?.cancel()
+        pendingStop = null
+        if (job == null) job = scope.launch { run() }
     }
 
+    /**
+     * The link is dropped a few seconds after the last holder leaves, so a rotation or a quick hop to
+     * system settings does not cost a fresh login.
+     */
     fun release() = synchronized(lock) {
-        if (--holders == 0) {
-            job?.cancel()
-            job = null
-            _state.update { it.copy(connection = Connection.Idle) }
+        if (--holders > 0) return@synchronized
+        holders = 0
+        pendingStop = scope.launch {
+            delay(RELEASE_GRACE.toMillis())
+            synchronized(lock) {
+                if (holders == 0) {
+                    job?.cancel()
+                    job = null
+                    _state.update { it.copy(connection = Connection.Idle) }
+                }
+            }
         }
     }
 
@@ -255,5 +270,6 @@ class EcoflowRepository(
         val AUTH_RETRY: Duration = Duration.ofMinutes(10)
         val QUOTA_CHECK: Duration = Duration.ofSeconds(20)
         val QUOTA_SILENCE: Duration = Duration.ofSeconds(60)
+        val RELEASE_GRACE: Duration = Duration.ofSeconds(8)
     }
 }
