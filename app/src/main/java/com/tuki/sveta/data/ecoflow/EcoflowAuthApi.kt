@@ -71,7 +71,7 @@ class EcoflowAuthApi(private val http: OkHttpClient) {
             if (!ok) {
                 val reason = message?.takeIf { it.isNotBlank() } ?: "HTTP ${response.code}"
                 // The API answers 200 with an error message for bad credentials; 401/403 mean a dead token.
-                if (authCall && root != null || response.code == 401 || response.code == 403) {
+                if (authCall && response.isSuccessful || response.code == 401 || response.code == 403) {
                     throw EcoflowAuthException(reason)
                 }
                 throw IOException("EcoFlow: $reason")
