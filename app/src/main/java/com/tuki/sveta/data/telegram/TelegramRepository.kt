@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -30,6 +32,8 @@ class TelegramRepository(
     private val history: HistoryStore,
     private val clock: Clock = Clock.systemUTC(),
 ) {
+    /** The service loop and the "check now" button may overlap; posts must be handled once. */
+    private val pollLock = Mutex()
     private val engine = PredictionEngine { key -> history.history.value.lags[key].orEmpty() }
 
     private val _prediction = MutableStateFlow<Prediction?>(null)
@@ -45,7 +49,7 @@ class TelegramRepository(
         get() = settings.settings.value.let { s -> s.channels.isNotEmpty() && s.rules.any { it.enabled } }
 
     /** One pass over all channels. [gridOn] is the measured grid state, null when unknown. */
-    suspend fun poll(gridOn: Boolean?) {
+    suspend fun poll(gridOn: Boolean?) = pollLock.withLock {
         val s = settings.settings.value
         val watches = s.rules.filter { it.enabled }.map { Watch(it.id, it.name, it.keywords) }
         for (channel in s.channels) {
