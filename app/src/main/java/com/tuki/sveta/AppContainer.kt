@@ -10,6 +10,7 @@ import com.tuki.sveta.data.store.SecretStore
 import com.tuki.sveta.data.store.SettingsStore
 import com.tuki.sveta.data.telegram.TelegramChannelScraper
 import com.tuki.sveta.data.telegram.TelegramRepository
+import com.tuki.sveta.service.Notifications
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,4 +36,7 @@ class AppContainer(context: Context) {
     val schedule = ScheduleRepository(MirrorDtekSource(http), File(context.filesDir, "dtek"))
     val ecoflow = EcoflowRepository(EcoflowAuthApi(http), settings, secrets, history, scope)
     val telegram = TelegramRepository(TelegramChannelScraper(http), settings, history)
+
+    val overview = OverviewSource(schedule, ecoflow, telegram, settings, scope)
+    val notifications = Notifications(context.applicationContext)
 }
