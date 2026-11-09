@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#FFC83D</color>
+    <color name="power_on">#2E9E5B</color>
+    <color name="power_off">#C6453B</color>
+    <color name="power_maybe">#E0A526</color>
+</resources>
