@@ -39,7 +39,14 @@ data class GridStatus(
 )
 
 /** A confirmed flip of the grid, emitted once per transition while we were watching. */
-data class GridTransition(val on: Boolean, val at: Instant, val volts: Double?, val assumed: Boolean)
+data class GridTransition(
+    val on: Boolean,
+    val at: Instant,
+    val volts: Double?,
+    val assumed: Boolean,
+    /** When the state that just ended had begun, if known. */
+    val previousSince: Instant? = null,
+)
 
 data class StationState(
     val connection: Connection = Connection.Idle,
@@ -239,7 +246,8 @@ class EcoflowRepository(
         history.update { it.copy(power = listOf(PowerEvent(now.toEpochMilli(), on, monitor.volts, monitor.assumed)) + it.power) }
         // The very first reading after install has nothing to be compared with, so it is logged silently.
         if (wasBlind && recorded == null) return
-        _transitions.tryEmit(GridTransition(on, now, monitor.volts, monitor.assumed))
+        val previousSince = if (wasBlind) recorded?.at?.let(Instant::ofEpochMilli) else previous.since
+        _transitions.tryEmit(GridTransition(on, now, monitor.volts, monitor.assumed, previousSince))
     }
 
     private companion object {
