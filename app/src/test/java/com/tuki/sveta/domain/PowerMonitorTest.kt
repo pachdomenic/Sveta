@@ -122,4 +122,16 @@ class PowerMonitorTest {
         assertFalse(m.onTick(t(200), connected = true))
         assertEquals(GridState.ON, m.state)
     }
+
+    @Test
+    fun `reset forgets everything and the next sample is taken at face value`() {
+        val m = PowerMonitor()
+        m.onVoltage(231.0, t(0))
+        m.reset()
+        assertEquals(GridState.UNKNOWN, m.state)
+        assertNull(m.volts)
+        assertFalse(m.onTick(t(1000), connected = true))
+        assertTrue(m.onVoltage(0.0, t(1001)))
+        assertEquals(GridState.OFF, m.state)
+    }
 }

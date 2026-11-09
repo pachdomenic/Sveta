@@ -68,6 +68,16 @@ class PowerMonitor(var config: Config = Config()) {
         return false
     }
 
+    /** We stopped watching: whatever we knew is stale from here on. */
+    fun reset() {
+        state = GridState.UNKNOWN
+        assumed = false
+        volts = null
+        pending = null
+        pendingSince = null
+        lastSample = null
+    }
+
     private fun settle(now: Instant): Boolean {
         val target = pending ?: return false
         val since = pendingSince ?: return false

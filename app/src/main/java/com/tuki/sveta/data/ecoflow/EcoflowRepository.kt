@@ -104,7 +104,9 @@ class EcoflowRepository(
                 if (holders == 0) {
                     job?.cancel()
                     job = null
-                    _state.update { it.copy(connection = Connection.Idle) }
+                    // Nobody is watching any more, so the last reading must not pass for the current one.
+                    synchronized(monitor) { monitor.reset() }
+                    _state.update { it.copy(connection = Connection.Idle, online = null, grid = GridStatus(since = it.grid.since)) }
                 }
             }
         }
@@ -255,7 +257,12 @@ class EcoflowRepository(
         val wasBlind = previous.state == GridState.UNKNOWN
         // Regaining sight of the state we already logged (process restart, link hiccup) is not a new event.
         val resumed = wasBlind && recorded?.on == on
-        val since = if (resumed) Instant.ofEpochMilli(recorded!!.at) else now
+        val since = when {
+            resumed -> Instant.ofEpochMilli(recorded!!.at)
+            // It flipped while we were not looking; the real moment is unknown.
+            wasBlind -> null
+            else -> now
+        }
         _state.update { it.copy(grid = GridStatus(state, since, monitor.volts, monitor.assumed)) }
         if (resumed) return
         history.update { it.copy(power = listOf(PowerEvent(now.toEpochMilli(), on, monitor.volts, monitor.assumed)) + it.power) }
