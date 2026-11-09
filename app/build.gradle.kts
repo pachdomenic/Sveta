@@ -43,6 +43,11 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.all { test ->
+            // -Psveta.live=true enables the tests that talk to the real DTEK mirror and t.me.
+            test.systemProperty("sveta.live", providers.gradleProperty("sveta.live").getOrElse("false"))
+            test.testLogging.showStandardStreams = true
+        }
     }
 }
 
