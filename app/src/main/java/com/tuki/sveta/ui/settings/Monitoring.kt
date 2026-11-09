@@ -4,7 +4,6 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
@@ -13,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.net.toUri
 import com.tuki.sveta.AppContainer
 import com.tuki.sveta.service.MonitorService
 import kotlinx.coroutines.launch
@@ -50,7 +50,7 @@ fun Context.isIgnoringBatteryOptimizations(): Boolean =
 /** Sideloaded personal tool that must hold a socket open all day: the direct exemption dialog is appropriate. */
 @SuppressLint("BatteryLife")
 fun Context.requestIgnoreBatteryOptimizations() {
-    val direct = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))
+    val direct = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, "package:$packageName".toUri())
     runCatching { startActivity(direct) }
         .onFailure { runCatching { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } }
 }
