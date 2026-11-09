@@ -62,7 +62,8 @@ class ScheduleRepository(
                     null
                 }
                 is DtekFetch.Body -> {
-                    val fresh = DtekParser.parse(result.text)
+                    // Callers are often on the main thread; the payload is ~70 KB of nested maps.
+                    val fresh = withContext(Dispatchers.Default) { DtekParser.parse(result.text) }
                     withContext(Dispatchers.IO) {
                         cacheDir.mkdirs()
                         cacheFile.writeText(result.text)
