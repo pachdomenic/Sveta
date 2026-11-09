@@ -38,6 +38,17 @@ object Texts {
         }
     }
 
+    /** A moment in the past: "18:04", "вчора 18:04", "07.11 18:04". */
+    fun past(t: Instant, now: Instant): String {
+        val time = t.atZone(KyivZone)
+        val today = now.atZone(KyivZone).toLocalDate()
+        return when (time.toLocalDate()) {
+            today -> CLOCK.format(time)
+            today.minusDays(1) -> "вчора ${CLOCK.format(time)}"
+            else -> "${DAY.format(time)} ${CLOCK.format(time)}"
+        }
+    }
+
     fun range(from: Instant, to: Instant): String = "${clock(from)}–${endClock(from, to)}"
 
     /** Midnight as the end of a range reads better as 24:00. */
