@@ -34,7 +34,7 @@ data class Settings(
 
     companion object {
         const val DEFAULT_ECOFLOW_HOST = "api.ecoflow.com"
-        val DEFAULT_OFF_WORDS = listOf("вимкн", "відключ", "знеструм", "зникло", "без світла", "немає світла", "нема світла", "пропало")
+        val DEFAULT_OFF_WORDS = listOf("вимкн", "відключ", "виключ", "знеструм", "зникло", "без світла", "немає світла", "нема світла", "пропало")
         val DEFAULT_ON_WORDS = listOf("увімкн", "включ", "з'явил", "зʼявил", "заживлен", "є світло", "дали світло", "відновлен")
     }
 }

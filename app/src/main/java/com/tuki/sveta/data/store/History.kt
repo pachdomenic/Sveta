@@ -1,5 +1,6 @@
 package com.tuki.sveta.data.store
 
+import com.tuki.sveta.domain.SwitchKind
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,9 +24,6 @@ data class PowerEvent(
 )
 
 @Serializable
-enum class MatchKind { OFF, ON }
-
-@Serializable
 data class ChannelMatch(
     val at: Long,
     val channel: String,
@@ -33,7 +31,7 @@ data class ChannelMatch(
     val text: String,
     val ruleId: String,
     val ruleName: String,
-    val kind: MatchKind,
+    val kind: SwitchKind,
 )
 
 @Serializable
@@ -42,8 +40,10 @@ data class History(
     val power: List<PowerEvent> = emptyList(),
     /** Newest first. */
     val matches: List<ChannelMatch> = emptyList(),
-    /** rule id -> seconds between the neighbour's outage post and our own outage. */
+    /** lag key (rule + direction) -> seconds between the neighbour's post and our own flip. */
     val lags: Map<String, List<Int>> = emptyMap(),
+    /** lag key -> predictions that expired without the grid following. */
+    val misses: Map<String, Int> = emptyMap(),
     /** channel -> highest post id already processed. */
     val seenPosts: Map<String, Long> = emptyMap(),
 )
