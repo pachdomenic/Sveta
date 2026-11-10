@@ -6,6 +6,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,8 +18,11 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -82,7 +87,10 @@ private fun MainScreen(app: AppContainer, onMonitoring: (Boolean) -> Unit) {
 
     BackHandler(enabled = tab != Tab.Home) { tab = Tab.Home }
 
-    val insets = WindowInsets.safeDrawing.asPaddingValues()
+    // safeDrawing counts the keyboard too, and the keyboard is already handled by imePadding() below;
+    // leaving it in here would lift everything by its height a second time.
+    val insets = WindowInsets.safeDrawing.exclude(WindowInsets.ime).asPaddingValues()
+    val keyboardOpen = WindowInsets.isImeVisible
     val direction = LocalLayoutDirection.current
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
@@ -105,8 +113,9 @@ private fun MainScreen(app: AppContainer, onMonitoring: (Boolean) -> Unit) {
                     }
                 }
 
-                // Room for the floating toolbar so the last card can scroll clear of it.
-                val contentPadding = PaddingValues(top = 4.dp, bottom = insets.calculateBottomPadding() + 104.dp)
+                // Room for the floating toolbar so the last card can scroll clear of it. While typing the
+                // toolbar is hidden and every line above the keyboard is precious.
+                val contentPadding = PaddingValues(top = 4.dp, bottom = if (keyboardOpen) 16.dp else insets.calculateBottomPadding() + 104.dp)
                 AnimatedContent(
                     targetState = tab,
                     transitionSpec = { (fadeIn() + scaleIn(initialScale = 0.97f)) togetherWith fadeOut() },
@@ -128,23 +137,31 @@ private fun MainScreen(app: AppContainer, onMonitoring: (Boolean) -> Unit) {
                 }
             }
 
-            HorizontalFloatingToolbar(
-                expanded = true,
-                colors = FloatingToolbarDefaults.vibrantFloatingToolbarColors(),
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = insets.calculateBottomPadding() + 16.dp),
+            // Above the keyboard it would sit right on top of the field being typed in.
+            AnimatedVisibility(
+                visible = !keyboardOpen,
+                modifier = Modifier.align(Alignment.BottomCenter),
+                enter = fadeIn() + slideInVertically { it },
+                exit = fadeOut() + slideOutVertically { it },
             ) {
-                Tab.entries.forEach { item ->
-                    val selected = item == tab
-                    ToggleButton(
-                        checked = selected,
-                        onCheckedChange = { tab = item },
-                        modifier = Modifier.padding(horizontal = 2.dp).semantics { role = Role.Tab },
-                    ) {
-                        Icon(item.icon, contentDescription = if (selected) null else item.title, modifier = Modifier.size(22.dp))
-                        AnimatedVisibility(selected) {
-                            Row {
-                                Spacer(Modifier.width(8.dp))
-                                Text(item.label)
+                HorizontalFloatingToolbar(
+                    expanded = true,
+                    colors = FloatingToolbarDefaults.vibrantFloatingToolbarColors(),
+                    modifier = Modifier.padding(bottom = insets.calculateBottomPadding() + 16.dp),
+                ) {
+                    Tab.entries.forEach { item ->
+                        val selected = item == tab
+                        ToggleButton(
+                            checked = selected,
+                            onCheckedChange = { tab = item },
+                            modifier = Modifier.padding(horizontal = 2.dp).semantics { role = Role.Tab },
+                        ) {
+                            Icon(item.icon, contentDescription = if (selected) null else item.title, modifier = Modifier.size(22.dp))
+                            AnimatedVisibility(selected) {
+                                Row {
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(item.label)
+                                }
                             }
                         }
                     }
