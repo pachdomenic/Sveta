@@ -38,7 +38,12 @@ class MonitorService : LifecycleService() {
             this,
             Notifications.ID_LIVE,
             app.settings.settings.value.let { settings ->
-                if (settings.liveCard) notifications.live(LiveContentBuilder.build(app.overview.current(), settings.liveChip)) else notifications.background()
+                when {
+                    settings.liveCardVisible(System.currentTimeMillis()) ->
+                        notifications.live(LiveContentBuilder.build(app.overview.current(), settings.liveChip), settings.liveHideMinutes)
+                    settings.liveCard -> notifications.background(Instant.ofEpochMilli(settings.liveHiddenUntil))
+                    else -> notifications.background(until = null)
+                }
             },
             if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0,
         )
@@ -70,18 +75,26 @@ class MonitorService : LifecycleService() {
     }
 
     private suspend fun liveCard() {
-        app.settings.settings.map { it.liveCard }.distinctUntilChanged().collectLatest { shown ->
-            if (!shown) {
-                // Posted once and left alone: if the user swipes it away it stays away.
-                app.notifications.showBackground()
+        app.settings.settings.map { it.liveCard to it.liveHiddenUntil }.distinctUntilChanged().collectLatest { (enabled, hiddenUntil) ->
+            // The placeholder is posted once and left alone: if the user swipes it away it stays away.
+            if (!enabled) {
+                app.notifications.showBackground(until = null)
                 return@collectLatest
             }
+            val wait = hiddenUntil - System.currentTimeMillis()
+            if (wait > 0) {
+                app.notifications.showBackground(Instant.ofEpochMilli(hiddenUntil))
+                // Put away by the button on the card: it comes back by itself.
+                delay(wait)
+            }
             app.overview.flow(LIVE_TICK)
-                .combine(app.settings.settings.map { it.liveChip }.distinctUntilChanged(), LiveContentBuilder::build)
+                .combine(app.settings.settings.map { it.liveChip to it.liveHideMinutes }.distinctUntilChanged()) { overview, (chip, hideMinutes) ->
+                    LiveContentBuilder.build(overview, chip) to hideMinutes
+                }
                 .distinctUntilChanged()
                 .conflate()
-                .collect { content ->
-                    app.notifications.updateLive(content)
+                .collect { (content, hideMinutes) ->
+                    app.notifications.updateLive(content, hideMinutes)
                     // The station reports several times a second; the system throttles apps that update that often.
                     delay(LIVE_MIN_INTERVAL.toMillis())
                 }

@@ -15,6 +15,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.IconCompat
 import com.tuki.sveta.MainActivity
 import com.tuki.sveta.R
+import com.tuki.sveta.domain.Texts
+import java.time.Instant
 import kotlin.math.roundToInt
 
 /** Channels, the ongoing Live Update and one-shot event notifications. */
@@ -65,7 +67,8 @@ class Notifications(private val context: Context) {
     val liveUpdatesAvailable: Boolean
         get() = Build.VERSION.SDK_INT >= 36 && manager.canPostPromotedNotifications()
 
-    fun live(content: LiveContent): Notification {
+    /** @param hideMinutes how long the "Сховати" button will put the card away for, shown on the button */
+    fun live(content: LiveContent, hideMinutes: Int): Notification {
         val accent = ContextCompat.getColor(
             context,
             when (content.tone) {
@@ -93,7 +96,7 @@ class Notifications(private val context: Context) {
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setContentIntent(openApp())
             .setRequestPromotedOngoing(true)
-            .addAction(0, "Сховати", LiveCardReceiver.intent(context, show = false))
+            .addAction(0, "Сховати на ${Texts.minutes(hideMinutes)}", LiveCardReceiver.intent(context, show = false))
 
         val countdown = content.countdownTo
         if (countdown != null) {
@@ -120,18 +123,23 @@ class Notifications(private val context: Context) {
         return builder.build()
     }
 
-    fun updateLive(content: LiveContent) {
-        if (canPost) notifySafely(ID_LIVE, live(content))
+    fun updateLive(content: LiveContent, hideMinutes: Int) {
+        if (canPost) notifySafely(ID_LIVE, live(content, hideMinutes))
     }
 
     /**
      * What the service shows while the live card is hidden: silent, collapsed, off the lock screen and
      * not pinned, so on Android 13+ it can simply be swiped away.
+     *
+     * @param until when the card comes back on its own, null when it was switched off for good
      */
-    fun background(): Notification = NotificationCompat.Builder(context, CHANNEL_BACKGROUND)
+    fun background(until: Instant?): Notification = NotificationCompat.Builder(context, CHANNEL_BACKGROUND)
         .setSmallIcon(R.drawable.ic_stat_bolt)
         .setContentTitle("Свєта стежить за світлом")
-        .setContentText("Живу картку сховано, сповіщення надходять як завжди")
+        .setContentText(
+            if (until != null) "Жива картка повернеться ${Texts.at(until, Instant.now())}, сповіщення надходять як завжди"
+            else "Живу картку сховано, сповіщення надходять як завжди"
+        )
         .setOngoing(false)
         .setSilent(true)
         .setShowWhen(false)
@@ -144,8 +152,8 @@ class Notifications(private val context: Context) {
         .build()
 
     /** Replaces the live card with the quiet placeholder under the same id, as the service needs one or the other. */
-    fun showBackground() {
-        if (canPost) notifySafely(ID_LIVE, background())
+    fun showBackground(until: Instant?) {
+        if (canPost) notifySafely(ID_LIVE, background(until))
     }
 
     fun powerEvent(title: String, text: String, on: Boolean) = event(

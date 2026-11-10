@@ -27,8 +27,10 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -53,6 +55,7 @@ import com.tuki.sveta.domain.EmergencyStatus
 import com.tuki.sveta.domain.PlannedAlert
 import com.tuki.sveta.domain.PlannedSwitch
 import com.tuki.sveta.domain.SwitchKind
+import com.tuki.sveta.domain.Texts
 import com.tuki.sveta.service.Alerts
 import com.tuki.sveta.service.EventTexts
 import com.tuki.sveta.ui.components.ChoiceGroup
@@ -63,6 +66,7 @@ import com.tuki.sveta.ui.components.SectionTitle
 import com.tuki.sveta.ui.components.SwitchRow
 import com.tuki.sveta.service.Tone
 import com.tuki.sveta.ui.theme.colors
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Instant
 import kotlin.math.roundToInt
@@ -233,14 +237,43 @@ fun SettingsScreen(app: AppContainer, contentPadding: PaddingValues, monitoringA
                 SwitchRow(
                     title = "Жива картка в шторці",
                     subtitle = if (settings.liveCard) {
-                        "Сховати можна й кнопкою «Сховати» на самій картці"
+                        "Вимикач ховає картку назовсім, кнопка «Сховати» на самій картці — на час"
                     } else {
                         "Сховано: моніторинг і сповіщення працюють, у шторці лишається тихий рядок, який можна змахнути"
                     },
                     checked = settings.liveCard,
-                    onChange = { on -> update { it.copy(liveCard = on) } },
+                    onChange = { on -> update { if (on) it.liveCardShown() else it.copy(liveCard = false, liveHiddenUntil = 0) } },
                     enabled = settings.monitoring,
                 )
+                if (settings.liveCard) {
+                    Hint("Кнопка «Сховати» ховає картку на")
+                    ChoiceGroup(
+                        options = Settings.LIVE_HIDE_OPTIONS,
+                        selected = settings.liveHideMinutes,
+                        onSelect = { minutes -> update { it.copy(liveHideMinutes = minutes) } },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { minutes -> Text(Texts.minutes(minutes)) }
+
+                    // Ticks only while the card is put away, to notice the moment it comes back.
+                    var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+                    LaunchedEffect(settings.liveHiddenUntil) {
+                        while (true) {
+                            nowMillis = System.currentTimeMillis()
+                            val left = settings.liveHiddenUntil - nowMillis
+                            if (left <= 0) break
+                            delay(minOf(left, 30_000L))
+                        }
+                    }
+                    if (!settings.liveCardVisible(nowMillis)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Зараз сховано, повернеться ${Texts.at(Instant.ofEpochMilli(settings.liveHiddenUntil), Instant.ofEpochMilli(nowMillis))}",
+                                Modifier.weight(1f).padding(end = 12.dp),
+                            )
+                            OutlinedButton(onClick = { update { it.liveCardShown() } }) { Text("Показати") }
+                        }
+                    }
+                }
                 if (settings.liveCard) Text(
                     when {
                         Build.VERSION.SDK_INT < 36 -> "Live Updates з'явились в Android 16. На цій версії показується звичайна постійна картка."

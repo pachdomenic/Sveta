@@ -9,8 +9,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * The "Сховати" / "Показати картку" buttons on the service notification. It only flips the setting;
- * the service watches the setting and swaps the notification itself.
+ * The "Сховати" / "Показати картку" buttons on the service notification. Hiding is for the time chosen
+ * in settings; showing undoes any kind of hiding. It only changes the settings: the service watches
+ * them and swaps the notification itself.
  */
 class LiveCardReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -23,7 +24,7 @@ class LiveCardReceiver : BroadcastReceiver() {
         val pending = goAsync()
         app.scope.launch {
             try {
-                withTimeoutOrNull(5_000) { app.settings.update { it.copy(liveCard = show) } }
+                withTimeoutOrNull(5_000) { app.settings.update { if (show) it.liveCardShown() else it.liveCardHidden(System.currentTimeMillis()) } }
             } finally {
                 pending.finish()
             }
