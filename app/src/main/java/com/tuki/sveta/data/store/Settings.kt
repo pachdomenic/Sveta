@@ -28,9 +28,9 @@ data class Settings(
     val plannedLeadMinutes: Int = 15,
     /** Show the live card while monitoring. When off, the service keeps a quiet placeholder instead. */
     val liveCard: Boolean = true,
-    /** How long the "Сховати" button on the card puts it away for. */
+    /** How long the "Сховати" button on the card puts it away for; [HIDE_UNTIL_EVENT] means until something happens. */
     val liveHideMinutes: Int = 60,
-    /** Epoch millis until which the card stays put away by that button; 0 when it is not. */
+    /** Epoch millis until which the card stays put away by that button; 0 when it is not, [UNTIL_EVENT] when it waits for an event. */
     val liveHiddenUntil: Long = 0,
     /** What the status bar chip of the live card shows while the power is out. */
     val liveChip: LiveChip = LiveChip.COUNTDOWN,
@@ -51,8 +51,12 @@ data class Settings(
     /** The card is neither switched off for good nor put away for a while. */
     fun liveCardVisible(nowMillis: Long): Boolean = liveCard && nowMillis >= liveHiddenUntil
 
-    /** What the "Сховати" button does: away for [liveHideMinutes], then back on its own. */
-    fun liveCardHidden(nowMillis: Long): Settings = copy(liveHiddenUntil = nowMillis + liveHideMinutes * 60_000L)
+    /** What the "Сховати" button does: away for [liveHideMinutes] or until the next event, then back on its own. */
+    fun liveCardHidden(nowMillis: Long): Settings =
+        copy(liveHiddenUntil = if (liveHideMinutes == HIDE_UNTIL_EVENT) UNTIL_EVENT else nowMillis + liveHideMinutes * 60_000L)
+
+    /** Something happened: a card that was waiting for exactly that comes back. Hiding for a set time is left alone. */
+    fun liveCardRevealedByEvent(): Settings = if (liveHiddenUntil == UNTIL_EVENT) copy(liveHiddenUntil = 0) else this
 
     /** What "Показати картку" does, however the card was hidden. */
     fun liveCardShown(): Settings = copy(liveCard = true, liveHiddenUntil = 0)
@@ -78,7 +82,11 @@ data class Settings(
         /** The DTEK group's only official channel; every region's announcements go through it. */
         const val DEFAULT_EMERGENCY_CHANNEL = "dtek_ua"
         val PLANNED_LEAD_OPTIONS = listOf(0, 5, 15, 30, 60)
-        val LIVE_HIDE_OPTIONS = listOf(30, 60, 180, 480)
+        /** Value of [liveHideMinutes] that hides the card until the next event instead of for a time. */
+        const val HIDE_UNTIL_EVENT = 0
+        /** Value of [liveHiddenUntil] while the card waits for the next event. */
+        const val UNTIL_EVENT = Long.MAX_VALUE
+        val LIVE_HIDE_OPTIONS = listOf(30, 60, 180, 480, HIDE_UNTIL_EVENT)
         val DEFAULT_OFF_WORDS = listOf("вимкн", "відключ", "виключ", "знеструм", "зникло", "без світла", "немає світла", "нема світла", "пропало")
         val DEFAULT_ON_WORDS = listOf("увімкн", "включ", "з'явил", "зʼявил", "заживлен", "є світло", "дали світло", "відновлен")
     }

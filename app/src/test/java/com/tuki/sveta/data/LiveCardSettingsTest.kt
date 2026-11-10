@@ -35,7 +35,28 @@ class LiveCardSettingsTest {
     }
 
     @Test
+    fun `hiding until the next event has no deadline and ends with the event`() {
+        val waiting = Settings(liveHideMinutes = Settings.HIDE_UNTIL_EVENT).liveCardHidden(now)
+        assertEquals(Settings.UNTIL_EVENT, waiting.liveHiddenUntil)
+        assertFalse(waiting.liveCardVisible(now + 1000 * 24 * 60 * minute))
+
+        val revealed = waiting.liveCardRevealedByEvent()
+        assertTrue(revealed.liveCardVisible(now))
+        // The choice of "until an event" for the next press stays.
+        assertEquals(Settings.HIDE_UNTIL_EVENT, revealed.liveHideMinutes)
+    }
+
+    @Test
+    fun `an event does not cut short hiding for a set time or bring back a switched off card`() {
+        val timed = Settings(liveHideMinutes = 180).liveCardHidden(now)
+        assertEquals(timed, timed.liveCardRevealedByEvent())
+        val off = Settings(liveCard = false)
+        assertEquals(off, off.liveCardRevealedByEvent())
+    }
+
+    @Test
     fun `showing undoes either kind of hiding`() {
+        assertTrue(Settings(liveHideMinutes = Settings.HIDE_UNTIL_EVENT).liveCardHidden(now).liveCardShown().liveCardVisible(now))
         assertTrue(Settings().liveCardHidden(now).liveCardShown().liveCardVisible(now))
         assertTrue(Settings(liveCard = false).liveCardShown().liveCardVisible(now))
         assertTrue(Settings(liveCard = false, liveHiddenUntil = now + minute).liveCardShown().liveCardVisible(now))

@@ -237,7 +237,7 @@ fun SettingsScreen(app: AppContainer, contentPadding: PaddingValues, monitoringA
                 SwitchRow(
                     title = "Жива картка в шторці",
                     subtitle = if (settings.liveCard) {
-                        "Вимикач ховає картку назовсім, кнопка «Сховати» на самій картці — на час"
+                        "Вимикач ховає картку назовсім, кнопка «Сховати» на самій картці — на час або до події"
                     } else {
                         "Сховано: моніторинг і сповіщення працюють, у шторці лишається тихий рядок, який можна змахнути"
                     },
@@ -252,7 +252,10 @@ fun SettingsScreen(app: AppContainer, contentPadding: PaddingValues, monitoringA
                         selected = settings.liveHideMinutes,
                         onSelect = { minutes -> update { it.copy(liveHideMinutes = minutes) } },
                         modifier = Modifier.fillMaxWidth(),
-                    ) { minutes -> Text(Texts.minutes(minutes)) }
+                    ) { minutes -> Text(if (minutes == Settings.HIDE_UNTIL_EVENT) "подія" else Texts.minutes(minutes), maxLines = 1) }
+                    if (settings.liveHideMinutes == Settings.HIDE_UNTIL_EVENT) {
+                        Hint("До події: картка повернеться, щойно світло вимкнуть чи увімкнуть, запровадять або скасують екстрені відключення чи з'явиться прогноз за сусідами.")
+                    }
 
                     // Ticks only while the card is put away, to notice the moment it comes back.
                     var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -260,14 +263,15 @@ fun SettingsScreen(app: AppContainer, contentPadding: PaddingValues, monitoringA
                         while (true) {
                             nowMillis = System.currentTimeMillis()
                             val left = settings.liveHiddenUntil - nowMillis
-                            if (left <= 0) break
+                            if (left <= 0 || settings.liveHiddenUntil == Settings.UNTIL_EVENT) break
                             delay(minOf(left, 30_000L))
                         }
                     }
                     if (!settings.liveCardVisible(nowMillis)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                "Зараз сховано, повернеться ${Texts.at(Instant.ofEpochMilli(settings.liveHiddenUntil), Instant.ofEpochMilli(nowMillis))}",
+                                if (settings.liveHiddenUntil == Settings.UNTIL_EVENT) "Зараз сховано до наступної події"
+                                else "Зараз сховано, повернеться ${Texts.at(Instant.ofEpochMilli(settings.liveHiddenUntil), Instant.ofEpochMilli(nowMillis))}",
                                 Modifier.weight(1f).padding(end = 12.dp),
                             )
                             OutlinedButton(onClick = { update { it.liveCardShown() } }) { Text("Показати") }

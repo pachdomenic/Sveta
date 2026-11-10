@@ -9,7 +9,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.tuki.sveta.container
+import com.tuki.sveta.data.store.Settings
+import com.tuki.sveta.domain.EventWatch
 import com.tuki.sveta.domain.GridState
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,8 +44,8 @@ class MonitorService : LifecycleService() {
                 when {
                     settings.liveCardVisible(System.currentTimeMillis()) ->
                         notifications.live(LiveContentBuilder.build(app.overview.current(), settings.liveChip), settings.liveHideMinutes)
-                    settings.liveCard -> notifications.background(Instant.ofEpochMilli(settings.liveHiddenUntil))
-                    else -> notifications.background(until = null)
+                    settings.liveCard -> notifications.background(settings.liveHiddenUntil)
+                    else -> notifications.background(hiddenUntil = null)
                 }
             },
             if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0,
@@ -51,6 +54,7 @@ class MonitorService : LifecycleService() {
         app.ecoflow.acquire()
 
         lifecycleScope.launch { liveCard() }
+        lifecycleScope.launch { revealOnEvents() }
         lifecycleScope.launch { powerEvents() }
         lifecycleScope.launch { predictionEvents() }
         lifecycleScope.launch { scheduleLoop() }
@@ -78,14 +82,15 @@ class MonitorService : LifecycleService() {
         app.settings.settings.map { it.liveCard to it.liveHiddenUntil }.distinctUntilChanged().collectLatest { (enabled, hiddenUntil) ->
             // The placeholder is posted once and left alone: if the user swipes it away it stays away.
             if (!enabled) {
-                app.notifications.showBackground(until = null)
+                app.notifications.showBackground(hiddenUntil = null)
                 return@collectLatest
             }
             val wait = hiddenUntil - System.currentTimeMillis()
             if (wait > 0) {
-                app.notifications.showBackground(Instant.ofEpochMilli(hiddenUntil))
-                // Put away by the button on the card: it comes back by itself.
-                delay(wait)
+                app.notifications.showBackground(hiddenUntil)
+                // Put away by the button on the card: it comes back by itself, when the time is up or,
+                // if it waits for an event, when revealOnEvents() clears the setting and restarts this block.
+                if (hiddenUntil == Settings.UNTIL_EVENT) awaitCancellation() else delay(wait)
             }
             app.overview.flow(LIVE_TICK)
                 .combine(app.settings.settings.map { it.liveChip to it.liveHideMinutes }.distinctUntilChanged()) { overview, (chip, hideMinutes) ->
@@ -98,6 +103,16 @@ class MonitorService : LifecycleService() {
                     // The station reports several times a second; the system throttles apps that update that often.
                     delay(LIVE_MIN_INTERVAL.toMillis())
                 }
+        }
+    }
+
+    /** Brings back a card that was hidden "until something happens". */
+    private suspend fun revealOnEvents() {
+        val watch = EventWatch()
+        app.overview.flow(LIVE_TICK).collect { overview ->
+            if (watch.happened(overview) && app.settings.settings.value.liveHiddenUntil == Settings.UNTIL_EVENT) {
+                app.settings.update { it.liveCardRevealedByEvent() }
+            }
         }
     }
 
