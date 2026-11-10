@@ -25,7 +25,7 @@ class SettingsStore(context: Context, scope: CoroutineScope) {
     private val key = stringPreferencesKey("settings_json")
 
     private fun decode(prefs: Preferences): Settings =
-        prefs[key]?.let { runCatching { json.decodeFromString(Settings.serializer(), it) }.getOrNull() } ?: Settings()
+        prefs[key]?.let { runCatching { json.decodeFromString(Settings.serializer(), it) }.getOrNull() }?.migrated() ?: Settings()
 
     /** Blocking first read keeps every consumer free of a "not loaded yet" state; the file is tiny. */
     val settings: StateFlow<Settings> = store.data.map(::decode)

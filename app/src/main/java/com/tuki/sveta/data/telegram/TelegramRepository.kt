@@ -3,6 +3,7 @@ package com.tuki.sveta.data.telegram
 import com.tuki.sveta.data.store.ChannelMatch
 import com.tuki.sveta.data.store.HistoryStore
 import com.tuki.sveta.data.store.SettingsStore
+import com.tuki.sveta.data.store.WatchRule
 import com.tuki.sveta.domain.PostMatcher
 import com.tuki.sveta.domain.Prediction
 import com.tuki.sveta.domain.PredictionEngine
@@ -25,7 +26,7 @@ import java.time.Instant
 
 data class ChannelStatus(val checkedAt: Instant? = null, val error: String? = null, val lastPostAt: Instant? = null)
 
-/** Polls the watched channels and keeps the neighbour-line predictions up to date. */
+/** Polls every watched line's channel and keeps the neighbour-line predictions up to date. */
 class TelegramRepository(
     private val scraper: TelegramChannelScraper,
     private val settings: SettingsStore,
@@ -46,13 +47,13 @@ class TelegramRepository(
     val channels: StateFlow<Map<String, ChannelStatus>> = _channels.asStateFlow()
 
     val hasWork: Boolean
-        get() = settings.settings.value.let { s -> s.channels.isNotEmpty() && s.rules.any { it.enabled } }
+        get() = watchesByChannel(settings.settings.value.rules).isNotEmpty()
 
-    /** One pass over all channels. [gridOn] is the measured grid state, null when unknown. */
+    /** One pass over the channels of all enabled lines. [gridOn] is the measured grid state, null when unknown. */
     suspend fun poll(gridOn: Boolean?) = pollLock.withLock {
         val s = settings.settings.value
-        val watches = s.rules.filter { it.enabled }.map { Watch(it.id, it.name, it.keywords) }
-        for (channel in s.channels) {
+        val byChannel = watchesByChannel(s.rules)
+        for ((channel, watches) in byChannel) {
             try {
                 val posts = scraper.latest(channel)
                 val now = clock.instant()
@@ -68,7 +69,7 @@ class TelegramRepository(
                 _channels.update { it + (channel to (it[channel] ?: ChannelStatus()).copy(checkedAt = clock.instant(), error = e.message ?: e.javaClass.simpleName)) }
             }
         }
-        _channels.update { known -> known.filterKeys { it in s.channels } }
+        _channels.update { known -> known.filterKeys { it in byChannel } }
     }
 
     private fun handle(post: ChannelPost, watches: List<Watch>, offWords: List<String>, onWords: List<String>, gridOn: Boolean?, now: Instant) {
@@ -116,7 +117,15 @@ class TelegramRepository(
         _prediction.value = engine.active
     }
 
-    private companion object {
-        val MATCH_MAX_AGE: Duration = Duration.ofHours(24)
+    companion object {
+        private val MATCH_MAX_AGE: Duration = Duration.ofHours(24)
+
+        /**
+         * Which lines to look for in which channel. Lines that share a channel are read from one fetch;
+         * a post in one line's channel never triggers a line that lives in another.
+         */
+        fun watchesByChannel(rules: List<WatchRule>): Map<String, List<Watch>> = rules
+            .filter { it.enabled && it.channel.isNotBlank() }
+            .groupBy({ it.channel }, { Watch(it.id, it.name, it.keywords) })
     }
 }
