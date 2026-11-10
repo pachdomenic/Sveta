@@ -13,21 +13,22 @@ sealed interface DtekFetch {
 
 /** Where the raw `DisconSchedule` JSON comes from. */
 fun interface DtekSource {
-    /** @param etag validator from the previous successful fetch, if any */
-    suspend fun fetch(etag: String?): DtekFetch
+    /** @param etag validator from the previous successful fetch of the same [region], if any */
+    suspend fun fetch(region: DtekRegion, etag: String?): DtekFetch
 }
 
 /**
- * dtek-krem.com.ua sits behind a bot wall that only a real browser passes, so the schedule is read from
- * the outage-data-ua mirror, which scrapes the same page with a headless browser every few minutes.
+ * The DTEK sites sit behind a bot wall that only a real browser passes, so the schedule is read from
+ * the outage-data-ua mirror, which scrapes the same pages with a headless browser every few minutes
+ * and keeps one file per region.
  */
 class MirrorDtekSource(
     private val http: OkHttpClient,
-    private val url: String = KYIV_REGION_URL,
+    private val baseUrl: String = MIRROR_URL,
 ) : DtekSource {
 
-    override suspend fun fetch(etag: String?): DtekFetch = withContext(Dispatchers.IO) {
-        val request = Request.Builder().url(url).apply {
+    override suspend fun fetch(region: DtekRegion, etag: String?): DtekFetch = withContext(Dispatchers.IO) {
+        val request = Request.Builder().url("$baseUrl/${region.id}.json").apply {
             if (etag != null) header("If-None-Match", etag)
         }.build()
         http.newCall(request).execute().use { response ->
@@ -40,7 +41,6 @@ class MirrorDtekSource(
     }
 
     companion object {
-        const val KYIV_REGION_URL =
-            "https://raw.githubusercontent.com/Baskerville42/outage-data-ua/main/data/kyiv-region.json"
+        const val MIRROR_URL = "https://raw.githubusercontent.com/Baskerville42/outage-data-ua/main/data"
     }
 }

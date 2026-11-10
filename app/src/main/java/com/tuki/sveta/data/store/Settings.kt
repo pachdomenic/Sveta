@@ -1,11 +1,14 @@
 package com.tuki.sveta.data.store
 
+import com.tuki.sveta.data.dtek.DtekRegion
 import kotlinx.serialization.Serializable
 
 @Serializable
 data class Settings(
     val onboarded: Boolean = false,
-    /** DTEK queue id, e.g. "GPV3.1". */
+    /** [DtekRegion.id]; kept as text so that a region dropped later cannot make the whole document unreadable. */
+    val region: String = DtekRegion.Default.id,
+    /** DTEK queue id within [region], e.g. "GPV3.1". */
     val group: String = "GPV1.1",
 
     val ecoflowEmail: String = "",
@@ -30,6 +33,8 @@ data class Settings(
     val predictMinMinutes: Int = 5,
     val predictMaxMinutes: Int = 20,
 ) {
+    val dtekRegion: DtekRegion get() = DtekRegion.byId(region)
+
     val ecoflowConfigured: Boolean get() = ecoflowEmail.isNotBlank() && ecoflowSerial.isNotBlank()
 
     companion object {

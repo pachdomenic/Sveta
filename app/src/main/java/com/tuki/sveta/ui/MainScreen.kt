@@ -50,7 +50,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tuki.sveta.AppContainer
-import com.tuki.sveta.domain.Texts
+import com.tuki.sveta.data.dtek.DtekParser
 import com.tuki.sveta.service.MonitorService
 import com.tuki.sveta.ui.home.HomeScreen
 import com.tuki.sveta.ui.onboarding.OnboardingScreen
@@ -77,6 +77,7 @@ fun SvetaRoot(app: AppContainer) {
 private fun MainScreen(app: AppContainer, onMonitoring: (Boolean) -> Unit) {
     var tab by rememberSaveable { mutableStateOf(Tab.Home) }
     val settings by app.settings.settings.collectAsStateWithLifecycle()
+    val schedule by app.schedule.state.collectAsStateWithLifecycle()
     val serviceRunning by MonitorService.isRunning.collectAsStateWithLifecycle()
     val monitoringActive = settings.monitoring && serviceRunning
 
@@ -101,7 +102,7 @@ private fun MainScreen(app: AppContainer, onMonitoring: (Boolean) -> Unit) {
                         Text(title, style = MaterialTheme.typography.headlineLargeEmphasized)
                     }
                     if (tab != Tab.Settings) {
-                        AssistChip(onClick = { tab = Tab.Settings }, label = { Text(Texts.queue(settings.group)) })
+                        AssistChip(onClick = { tab = Tab.Settings }, label = { Text(DtekParser.groupTitle(schedule.payloadFor(settings.dtekRegion), settings.group)) })
                     }
                 }
 

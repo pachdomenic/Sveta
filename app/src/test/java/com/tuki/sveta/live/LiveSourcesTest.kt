@@ -2,6 +2,7 @@ package com.tuki.sveta.live
 
 import com.tuki.sveta.data.dtek.DtekFetch
 import com.tuki.sveta.data.dtek.DtekParser
+import com.tuki.sveta.data.dtek.DtekRegion
 import com.tuki.sveta.data.dtek.MirrorDtekSource
 import com.tuki.sveta.data.telegram.TelegramChannelScraper
 import com.tuki.sveta.domain.KyivZone
@@ -28,29 +29,33 @@ class LiveSourcesTest {
     fun onlyWhenAsked() = assumeTrue(System.getProperty("sveta.live") == "true")
 
     @Test
-    fun `dtek mirror serves a fresh schedule for every queue`() = runBlocking {
-        val body = MirrorDtekSource(http).fetch(etag = null) as DtekFetch.Body
-        val payload = DtekParser.parse(body.text)
-        val groups = DtekParser.groups(payload)
-        assertEquals(12, groups.size)
-
+    fun `dtek mirror serves a fresh schedule for every queue of every region`() = runBlocking {
         val today = LocalDate.now(KyivZone)
-        for (group in groups) {
-            val days = DtekParser.days(payload, group.id, today, count = 2)
-            assertTrue("no days for ${group.id}", days.isNotEmpty())
+        for (region in DtekRegion.entries) {
+            val body = MirrorDtekSource(http).fetch(region, etag = null) as DtekFetch.Body
+            val payload = DtekParser.parse(body.text)
+            assertEquals(region.id, payload.regionId)
+            val groups = DtekParser.groups(payload)
+            assertTrue("${region.id}: only ${groups.size} queues", groups.size >= 12)
+
+            for (group in groups) {
+                val days = DtekParser.days(payload, group.id, today, count = 2)
+                assertTrue("${region.id}: no days for ${group.id}", days.isNotEmpty())
+            }
+            // The mirror re-scrapes every few minutes; a day-old file means its pipeline is stuck.
+            val age = Duration.between(Instant.parse(payload.lastUpdated), Instant.now())
+            assertTrue("${region.id}: mirror is stale: $age", age < Duration.ofHours(24))
+            val factual = groups.count { DtekParser.factDays(payload, it.id).isNotEmpty() }
+            println("DTEK ${region.id} ok: updated ${payload.fact.update}, ${groups.size} queues, $factual with a published day")
         }
-        // The mirror re-scrapes every few minutes; a day-old file means its pipeline is stuck.
-        val age = Duration.between(Instant.parse(payload.lastUpdated), Instant.now())
-        assertTrue("mirror is stale: $age", age < Duration.ofHours(24))
-        println("DTEK ok: updated ${payload.fact.update}, fact days ${DtekParser.factDays(payload, groups.first().id).map { it.date }}")
     }
 
     @Test
     fun `conditional request is honoured`() = runBlocking {
         val source = MirrorDtekSource(http)
-        val first = source.fetch(null) as DtekFetch.Body
+        val first = source.fetch(DtekRegion.Default, null) as DtekFetch.Body
         assumeTrue("no etag from the mirror", first.etag != null)
-        val second = source.fetch(first.etag)
+        val second = source.fetch(DtekRegion.Default, first.etag)
         // Either unchanged, or the file was republished in between; both are valid.
         assertTrue(second is DtekFetch.NotModified || second is DtekFetch.Body)
         println("ETag revalidation: ${second::class.simpleName}")
