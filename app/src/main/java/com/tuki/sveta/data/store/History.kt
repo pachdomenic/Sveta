@@ -1,5 +1,7 @@
 package com.tuki.sveta.data.store
 
+import com.tuki.sveta.domain.EmergencyKind
+import com.tuki.sveta.domain.EmergencyStatus
 import com.tuki.sveta.domain.SwitchKind
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +48,10 @@ data class History(
     val misses: Map<String, Int> = emptyMap(),
     /** channel -> highest post id already processed. */
     val seenPosts: Map<String, Long> = emptyMap(),
+    /** Last known word on emergency outages. */
+    val emergency: EmergencyStatus? = null,
+    /** Announcement post id -> what it said when we last read it; posts get edited in place. */
+    val emergencyPosts: Map<Long, EmergencyKind> = emptyMap(),
 )
 
 /** Small append-mostly log kept as one JSON file; lists are capped so it never grows unbounded. */

@@ -1,6 +1,7 @@
 package com.tuki.sveta.service
 
 import com.tuki.sveta.domain.DaySchedule
+import com.tuki.sveta.domain.EmergencyStatus
 import com.tuki.sveta.domain.GridState
 import com.tuki.sveta.domain.KyivZone
 import com.tuki.sveta.domain.LagWindow
@@ -52,6 +53,31 @@ class LiveContentTest {
         assertEquals(Tone.ON, c.tone)
         assertEquals(226f / 360f, c.progress!!, 0.001f)
         assertEquals("Батарея 74 % · до повного 1 год 33 хв", c.detail)
+    }
+
+    private val emergency = EmergencyStatus(true, at(13).toEpochMilli(), at(13).toEpochMilli(), "Київська область: запроваджені екстрені відключення", "dtek_ua", 1)
+
+    @Test
+    fun `emergency outages take the schedule out of the card`() {
+        val on = LiveContentBuilder.build(overview(at(15, 46), GridState.ON, volts = 228.3, since = at(12)).copy(emergency = emergency))
+        assertEquals("Світло є · 228 В", on.title)
+        assertEquals("Екстрені відключення: графік не діє, можуть вимкнути будь-якої миті", on.text)
+        assertNull(on.progress)
+
+        val off = LiveContentBuilder.build(overview(at(19), GridState.OFF, since = at(17, 52)).copy(emergency = emergency))
+        assertEquals("Світла немає", off.title)
+        assertEquals("Екстрені відключення: графік не діє, коли увімкнуть — невідомо", off.text)
+        assertNull(off.countdownTo)
+        assertNull(off.progress)
+    }
+
+    @Test
+    fun `emergency outages without a station admit there is nothing to count down to`() {
+        val c = LiveContentBuilder.build(overview(at(19), GridState.UNKNOWN).copy(emergency = emergency))
+        assertEquals("Екстрені відключення", c.title)
+        assertEquals(Tone.WARNING, c.tone)
+        assertNull(c.countdownTo)
+        assertNull(c.chip)
     }
 
     @Test

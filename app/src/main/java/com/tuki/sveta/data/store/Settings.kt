@@ -20,6 +20,10 @@ data class Settings(
     val notifyPower: Boolean = true,
     val notifySchedule: Boolean = true,
     val notifyPredict: Boolean = true,
+    /** Emergency outages announced or called off in [emergencyChannel]. */
+    val notifyEmergency: Boolean = true,
+    /** Public Telegram channel where DTEK announces emergency outages. */
+    val emergencyChannel: String = DEFAULT_EMERGENCY_CHANNEL,
 
     /** Public Telegram channel usernames without "@". */
     val channels: List<String> = emptyList(),
@@ -34,6 +38,8 @@ data class Settings(
 
     companion object {
         const val DEFAULT_ECOFLOW_HOST = "api.ecoflow.com"
+        /** The DTEK group's only official channel; every region's announcements go through it. */
+        const val DEFAULT_EMERGENCY_CHANNEL = "dtek_ua"
         val DEFAULT_OFF_WORDS = listOf("вимкн", "відключ", "виключ", "знеструм", "зникло", "без світла", "немає світла", "нема світла", "пропало")
         val DEFAULT_ON_WORDS = listOf("увімкн", "включ", "з'явил", "зʼявил", "заживлен", "є світло", "дали світло", "відновлен")
     }

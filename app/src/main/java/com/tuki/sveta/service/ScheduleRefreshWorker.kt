@@ -12,8 +12,8 @@ import com.tuki.sveta.container
 import java.util.concurrent.TimeUnit
 
 /**
- * Hourly safety net: keeps the schedule fresh and reports changes even when the foreground service is
- * not running, and tries to revive the service if the system killed it.
+ * Hourly safety net: keeps the schedule fresh, looks for emergency outages and reports both even when
+ * the foreground service is not running, and tries to revive the service if the system killed it.
  */
 class ScheduleRefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
@@ -26,6 +26,7 @@ class ScheduleRefreshWorker(context: Context, params: WorkerParameters) : Corout
         if (MonitorService.isRunning.value) return Result.success()
 
         app.alerts.refreshSchedule(settings.group)
+        app.alerts.checkEmergency()
         return if (app.schedule.state.value.error == null) Result.success() else Result.retry()
     }
 

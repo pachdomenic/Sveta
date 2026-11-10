@@ -2,9 +2,14 @@ package com.tuki.sveta.service
 
 import com.tuki.sveta.data.dtek.ScheduleChange
 import com.tuki.sveta.domain.DaySchedule
+import com.tuki.sveta.domain.EmergencyStatus
+import com.tuki.sveta.domain.GridState
 import com.tuki.sveta.domain.KyivZone
+import com.tuki.sveta.domain.Overview
 import com.tuki.sveta.domain.SlotState
+import com.tuki.sveta.domain.Timeline
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
 import java.time.LocalDate
@@ -44,5 +49,27 @@ class EventTextsTest {
         val text = EventTexts.schedule(ScheduleChange(changed = listOf(clear, day(nov9.plusDays(1), 4..9)), added = emptyList(), cancelled = listOf(clear)), at(9, 12))
         assertEquals("Графік відключень змінено", text.title)
         assertEquals("Сьогодні: без відключень\nЗавтра: 02:00–05:00 · разом 3 год", text.text)
+    }
+
+    private fun overview(now: Instant, grid: GridState) =
+        Overview(now, grid, false, null, null, Timeline(listOf(day(nov9, 20..23, 36..43))), null, null, null, null, null, null)
+
+    @Test
+    fun `emergency start names the source and warns about the schedule`() {
+        val status = EmergencyStatus(true, at(9, 13).toEpochMilli(), at(9, 13).toEpochMilli(), "Київська область: за командою Укренерго запроваджені екстрені відключення", "dtek_ua", 4806)
+        val text = EventTexts.emergency(status, overview(at(9, 13, 2), GridState.ON))
+        assertEquals("Екстрені відключення", text.title)
+        assertTrue(text.text.startsWith("Київська область: за командою Укренерго запроваджені екстрені відключення (@dtek_ua)\n"))
+        assertTrue(text.text.endsWith("Графік зараз не діє: світло можуть вимкнути й увімкнути будь-коли."))
+    }
+
+    @Test
+    fun `emergency end says what the schedule expects next`() {
+        val status = EmergencyStatus(false, at(9, 15).toEpochMilli(), at(9, 15).toEpochMilli(), "Київщина: повертаємось до графіків, екстрені відключення скасовано", "dtek_ua", 4771)
+        val on = EventTexts.emergency(status, overview(at(9, 15, 2), GridState.ON))
+        assertEquals("Екстрені відключення скасовано", on.title)
+        assertTrue(on.text.endsWith("Графік знову діє: наступне відключення о 18:00."))
+        val off = EventTexts.emergency(status, overview(at(9, 19), GridState.OFF))
+        assertTrue(off.text.endsWith("Графік знову діє: увімкнуть о 22:00."))
     }
 }

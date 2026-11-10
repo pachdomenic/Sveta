@@ -2,6 +2,7 @@ package com.tuki.sveta.service
 
 import com.tuki.sveta.data.dtek.ScheduleChange
 import com.tuki.sveta.data.ecoflow.GridTransition
+import com.tuki.sveta.domain.EmergencyStatus
 import com.tuki.sveta.domain.Overview
 import com.tuki.sveta.domain.Prediction
 import com.tuki.sveta.domain.SwitchKind
@@ -23,6 +24,7 @@ object EventTexts {
             val parts = listOfNotNull(
                 lasted?.let { "Не було ${Texts.duration(it)}." },
                 when {
+                    overview.emergency != null -> "Діють екстрені відключення — можуть вимкнути знову."
                     overview.expectation?.offSchedule == true -> "За графіком зараз відключення — можуть вимкнути знову."
                     next != null -> "Наступне відключення ${Texts.at(next, transition.at)}."
                     else -> "Відключень за графіком більше не видно."
@@ -32,6 +34,7 @@ object EventTexts {
         } else {
             val parts = listOfNotNull(
                 when {
+                    overview.emergency != null -> "Діють екстрені відключення — коли увімкнуть, невідомо."
                     next != null -> "Увімкнуть за графіком ${Texts.at(next, transition.at)}."
                     else -> "Поза графіком — коли увімкнуть, невідомо."
                 },
@@ -78,5 +81,24 @@ object EventTexts {
                 "${Texts.dayName(day, now)}: ${Texts.outages(day)}$total"
             },
         )
+    }
+
+    /** Emergency outages began or were called off. [overview] supplies what the schedule says once it applies again. */
+    fun emergency(status: EmergencyStatus, overview: Overview): EventText {
+        val source = if (status.channel.isNotBlank()) " (@${status.channel})" else ""
+        return if (status.active) {
+            EventText(
+                "Екстрені відключення",
+                "${status.summary}$source\nГрафік зараз не діє: світло можуть вимкнути й увімкнути будь-коли.",
+            )
+        } else {
+            val next = overview.nextSwitch
+            val back = when {
+                next == null -> "Графік знову діє."
+                overview.effectiveOn == true -> "Графік знову діє: наступне відключення ${Texts.at(next, overview.now)}."
+                else -> "Графік знову діє: увімкнуть ${Texts.at(next, overview.now)}."
+            }
+            EventText("Екстрені відключення скасовано", "${status.summary}$source\n$back")
+        }
     }
 }

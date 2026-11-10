@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tuki.sveta.AppContainer
 import com.tuki.sveta.domain.DaySchedule
+import com.tuki.sveta.domain.EmergencyTracker
 import com.tuki.sveta.domain.Interval
 import com.tuki.sveta.domain.KyivZone
 import com.tuki.sveta.domain.SlotState
@@ -38,6 +39,7 @@ import com.tuki.sveta.domain.Timeline
 import com.tuki.sveta.ui.components.ChoiceGroup
 import com.tuki.sveta.ui.components.DayStrip
 import com.tuki.sveta.ui.components.Dot
+import com.tuki.sveta.ui.components.EmergencyBanner
 import com.tuki.sveta.ui.components.Hint
 import com.tuki.sveta.ui.components.SectionCard
 import com.tuki.sveta.ui.components.SectionTitle
@@ -52,6 +54,7 @@ fun ScheduleScreen(app: AppContainer, contentPadding: PaddingValues) {
     val state by app.schedule.state.collectAsStateWithLifecycle()
     val timeline by app.overview.timeline.collectAsStateWithLifecycle()
     val settings by app.settings.settings.collectAsStateWithLifecycle()
+    val history by app.history.history.collectAsStateWithLifecycle()
     val clock = remember {
         flow {
             while (true) {
@@ -72,6 +75,10 @@ fun ScheduleScreen(app: AppContainer, contentPadding: PaddingValues) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.padding(horizontal = 16.dp),
     ) {
+        EmergencyTracker.current(history.emergency, now)?.let { emergency ->
+            item { EmergencyBanner(emergency, now) }
+        }
+
         item {
             SectionCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {

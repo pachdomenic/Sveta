@@ -42,6 +42,9 @@ class Notifications(private val context: Context) {
                 NotificationChannel(CHANNEL_SCHEDULE, "Зміни графіка", NotificationManager.IMPORTANCE_DEFAULT).apply {
                     description = "ДТЕК опублікував, змінив або скасував графік для вашої черги"
                 },
+                NotificationChannel(CHANNEL_EMERGENCY, "Екстрені відключення", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "ДТЕК запровадив або скасував екстрені відключення на Київщині"
+                },
             )
         )
     }
@@ -124,6 +127,15 @@ class Notifications(private val context: Context) {
 
     fun scheduleChanged(title: String, text: String) = event(ID_SCHEDULE, CHANNEL_SCHEDULE, R.drawable.ic_stat_bolt, R.color.power_maybe, title, text)
 
+    fun emergency(title: String, text: String, active: Boolean) = event(
+        id = ID_EMERGENCY,
+        channel = CHANNEL_EMERGENCY,
+        icon = if (active) R.drawable.ic_stat_warning else R.drawable.ic_stat_bolt,
+        color = if (active) R.color.power_off else R.color.power_on,
+        title = title,
+        text = text,
+    )
+
     fun cancelPrediction() = manager.cancel(ID_PREDICT)
 
     private fun event(id: Int, channel: String, icon: Int, color: Int, title: String, text: String) {
@@ -161,10 +173,12 @@ class Notifications(private val context: Context) {
         const val CHANNEL_POWER = "power"
         const val CHANNEL_PREDICT = "predict"
         const val CHANNEL_SCHEDULE = "schedule"
+        const val CHANNEL_EMERGENCY = "emergency"
         const val ID_LIVE = 1
         const val ID_POWER = 2
         const val ID_PREDICT = 3
         const val ID_SCHEDULE = 4
+        const val ID_EMERGENCY = 5
         private const val PROGRESS_MAX = 1000
     }
 }

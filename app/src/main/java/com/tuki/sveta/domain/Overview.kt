@@ -19,6 +19,8 @@ data class Overview(
     val dischargeRemainMinutes: Int?,
     val inputWatts: Int?,
     val outputWatts: Int?,
+    /** Emergency outages in effect: the schedule in [timeline] is not being followed. */
+    val emergency: EmergencyStatus? = null,
 ) {
     val scheduleState: SlotState? = timeline?.stateAt(now)
 

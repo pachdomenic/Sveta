@@ -46,6 +46,8 @@ import com.tuki.sveta.data.dtek.DtekParser
 import com.tuki.sveta.data.dtek.PowerGroup
 import com.tuki.sveta.data.ecoflow.Connection
 import com.tuki.sveta.data.store.Settings
+import com.tuki.sveta.domain.EmergencyStatus
+import com.tuki.sveta.service.EventTexts
 import com.tuki.sveta.ui.components.Dot
 import com.tuki.sveta.ui.components.Hint
 import com.tuki.sveta.ui.components.SectionCard
@@ -54,6 +56,7 @@ import com.tuki.sveta.ui.components.SwitchRow
 import com.tuki.sveta.service.Tone
 import com.tuki.sveta.ui.theme.colors
 import kotlinx.coroutines.launch
+import java.time.Instant
 import kotlin.math.roundToInt
 
 /** Queues exist even before the first download, so the picker never shows up empty. */
@@ -77,6 +80,7 @@ fun SettingsScreen(app: AppContainer, contentPadding: PaddingValues, monitoringA
     val settings by app.settings.settings.collectAsStateWithLifecycle()
     val schedule by app.schedule.state.collectAsStateWithLifecycle()
     val station by app.ecoflow.state.collectAsStateWithLifecycle()
+    val emergencySource by app.emergency.source.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -160,7 +164,7 @@ fun SettingsScreen(app: AppContainer, contentPadding: PaddingValues, monitoringA
                 SectionTitle("Сповіщення", icon = Icons.Rounded.Notifications)
                 SwitchRow(
                     title = "Фоновий моніторинг",
-                    subtitle = if (monitoringActive) "Працює: жива картка в шторці та миттєві сповіщення" else "Вимкнено: без живої картки, графік перевіряється раз на годину",
+                    subtitle = if (monitoringActive) "Працює: жива картка в шторці та миттєві сповіщення" else "Вимкнено: без живої картки, графік та екстрені перевіряються раз на годину",
                     checked = settings.monitoring,
                     onChange = onMonitoring,
                 )
@@ -182,6 +186,13 @@ fun SettingsScreen(app: AppContainer, contentPadding: PaddingValues, monitoringA
                     checked = settings.notifySchedule,
                     onChange = { on -> update { it.copy(notifySchedule = on) } },
                 )
+                SwitchRow(
+                    title = "Екстрені відключення",
+                    subtitle = "Запровадили або скасували — за дописами @${settings.emergencyChannel}",
+                    checked = settings.notifyEmergency,
+                    onChange = { on -> update { it.copy(notifyEmergency = on) } },
+                )
+                emergencySource.error?.let { Text("Канал @${settings.emergencyChannel} недоступний: $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 SwitchRow("Прогноз за сусідніми лініями", settings.notifyPredict, { on -> update { it.copy(notifyPredict = on) } })
 
                 Text(
@@ -230,6 +241,19 @@ private fun Diagnostics(app: AppContainer, raw: Map<String, String>) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { app.ecoflow.simulateVoltage(0.0) }) { Text("Зникло") }
                         OutlinedButton(onClick = { app.ecoflow.simulateVoltage(229.0) }) { Text("З'явилось") }
+                    }
+                    Hint("Зразки сповіщень:")
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val now = Instant.now()
+                        val sample = EmergencyStatus(true, now.toEpochMilli(), now.toEpochMilli(), "Київська область: за командою Укренерго запроваджені екстрені відключення", "dtek_ua")
+                        OutlinedButton(onClick = {
+                            val text = EventTexts.emergency(sample, app.overview.current())
+                            app.notifications.emergency(text.title, text.text, active = true)
+                        }) { Text("Екстрені") }
+                        OutlinedButton(onClick = {
+                            val text = EventTexts.emergency(sample.copy(active = false, summary = "Київщина: повертаємось до графіків, екстрені відключення скасовано"), app.overview.current())
+                            app.notifications.emergency(text.title, text.text, active = false)
+                        }) { Text("Скасовано") }
                     }
                 }
                 val interesting = raw.filterKeys { it.startsWith("inv.") || it.startsWith("pd.watts") || it.startsWith("ems.") && it.endsWith("RemainTime") || it.endsWith(".soc") }

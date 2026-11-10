@@ -1,8 +1,10 @@
 package com.tuki.sveta.service
 
+import com.tuki.sveta.OverviewSource
 import com.tuki.sveta.data.dtek.ScheduleChange
 import com.tuki.sveta.data.dtek.ScheduleRepository
 import com.tuki.sveta.data.store.SettingsStore
+import com.tuki.sveta.data.telegram.EmergencyRepository
 import java.time.Clock
 
 /**
@@ -12,6 +14,8 @@ import java.time.Clock
  */
 class Alerts(
     private val schedule: ScheduleRepository,
+    private val emergency: EmergencyRepository,
+    private val overview: OverviewSource,
     private val settings: SettingsStore,
     private val notifications: Notifications,
     private val clock: Clock = Clock.systemUTC(),
@@ -25,5 +29,15 @@ class Alerts(
             notifications.scheduleChanged(text.title, text.text)
         }
         return change
+    }
+
+    /** Reads the announcement channel and tells the user when emergency outages begin or end. */
+    suspend fun checkEmergency() {
+        val event = emergency.poll() ?: return
+        if (settings.settings.value.let { it.onboarded && it.notifyEmergency }) {
+            notifications.ensureChannels()
+            val text = EventTexts.emergency(event, overview.current())
+            notifications.emergency(text.title, text.text, event.active)
+        }
     }
 }

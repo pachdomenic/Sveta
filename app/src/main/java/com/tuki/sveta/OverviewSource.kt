@@ -3,7 +3,9 @@ package com.tuki.sveta
 import com.tuki.sveta.data.dtek.DtekParser
 import com.tuki.sveta.data.dtek.ScheduleRepository
 import com.tuki.sveta.data.ecoflow.EcoflowRepository
+import com.tuki.sveta.data.store.HistoryStore
 import com.tuki.sveta.data.store.SettingsStore
+import com.tuki.sveta.data.telegram.EmergencyRepository
 import com.tuki.sveta.data.telegram.TelegramRepository
 import com.tuki.sveta.domain.KyivZone
 import com.tuki.sveta.domain.Overview
@@ -27,6 +29,8 @@ class OverviewSource(
     private val schedule: ScheduleRepository,
     private val ecoflow: EcoflowRepository,
     private val telegram: TelegramRepository,
+    private val emergency: EmergencyRepository,
+    private val history: HistoryStore,
     settings: SettingsStore,
     scope: CoroutineScope,
     private val clock: Clock = Clock.systemUTC(),
@@ -49,8 +53,9 @@ class OverviewSource(
 
     fun current(): Overview {
         val station = ecoflow.state.value
+        val now = clock.instant()
         return Overview(
-            now = clock.instant(),
+            now = now,
             grid = station.grid.state,
             assumed = station.grid.assumed,
             volts = station.grid.volts,
@@ -62,6 +67,7 @@ class OverviewSource(
             dischargeRemainMinutes = station.snapshot.dischargeRemainMinutes,
             inputWatts = station.snapshot.totalInWatts,
             outputWatts = station.snapshot.totalOutWatts,
+            emergency = emergency.current(now),
         )
     }
 
@@ -73,6 +79,7 @@ class OverviewSource(
                 delay(tick.toMillis())
             }
         }
-        return combine(ecoflow.state, timeline, telegram.prediction, ticker) { _, _, _, _ -> current() }
+        val emergencyChanged = history.history.map { it.emergency }.distinctUntilChanged()
+        return combine(ecoflow.state, timeline, telegram.prediction, emergencyChanged, ticker) { _, _, _, _, _ -> current() }
     }
 }

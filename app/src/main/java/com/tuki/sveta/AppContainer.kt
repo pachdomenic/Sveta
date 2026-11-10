@@ -8,6 +8,7 @@ import com.tuki.sveta.data.ecoflow.EcoflowRepository
 import com.tuki.sveta.data.store.HistoryStore
 import com.tuki.sveta.data.store.SecretStore
 import com.tuki.sveta.data.store.SettingsStore
+import com.tuki.sveta.data.telegram.EmergencyRepository
 import com.tuki.sveta.data.telegram.TelegramChannelScraper
 import com.tuki.sveta.data.telegram.TelegramRepository
 import com.tuki.sveta.service.Alerts
@@ -36,9 +37,11 @@ class AppContainer(context: Context) {
 
     val schedule = ScheduleRepository(MirrorDtekSource(http), File(context.filesDir, "dtek"))
     val ecoflow = EcoflowRepository(EcoflowAuthApi(http), settings, secrets, history, scope)
-    val telegram = TelegramRepository(TelegramChannelScraper(http), settings, history)
+    private val scraper = TelegramChannelScraper(http)
+    val telegram = TelegramRepository(scraper, settings, history)
+    val emergency = EmergencyRepository(scraper, settings, history)
 
-    val overview = OverviewSource(schedule, ecoflow, telegram, settings, scope)
+    val overview = OverviewSource(schedule, ecoflow, telegram, emergency, history, settings, scope)
     val notifications = Notifications(context.applicationContext)
-    val alerts = Alerts(schedule, settings, notifications)
+    val alerts = Alerts(schedule, emergency, overview, settings, notifications)
 }

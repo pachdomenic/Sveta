@@ -28,6 +28,13 @@ object LiveContentBuilder {
         val prediction = o.activePrediction
         return when {
             prediction != null && prediction.kind == SwitchKind.OFF -> warning(o)
+            // Nothing measured and the schedule is suspended: there is honestly nothing to count down to.
+            o.emergency != null && !o.measured -> LiveContent(
+                title = "Екстрені відключення",
+                text = "Графік не діє — світло можуть вимкнути й увімкнути будь-коли",
+                detail = battery(o, charging = false),
+                chip = null, countdownTo = null, progress = null, tone = Tone.WARNING,
+            )
             o.effectiveOn == true -> on(o)
             o.effectiveOn == false -> off(o)
             else -> LiveContent(
@@ -46,6 +53,7 @@ object LiveContentBuilder {
             else -> "Світло є"
         }
         val text = when {
+            o.emergency != null -> "Екстрені відключення: графік не діє, можуть вимкнути будь-якої миті"
             o.expectation?.offSchedule == true -> "За графіком уже відключення — можуть вимкнути будь-якої миті"
             next != null -> "Вимкнуть ${Texts.at(next, o.now)} · через ${Texts.duration(Duration.between(o.now, next))}"
             else -> "Відключень за графіком не видно"
@@ -56,7 +64,7 @@ object LiveContentBuilder {
             detail = battery(o, charging = true),
             chip = o.volts?.takeIf { o.measured }?.let(Texts::volts),
             countdownTo = null,
-            progress = o.progress,
+            progress = o.progress.takeIf { o.emergency == null },
             tone = if (o.measured) Tone.ON else Tone.UNKNOWN,
         )
     }
@@ -71,6 +79,7 @@ object LiveContentBuilder {
         }
         val text = when {
             restoreHint != null -> "«${restoreHint.trigger.watchName}» уже зі світлом — чекай ${Texts.range(restoreHint.earliest, restoreHint.latest)}"
+            o.emergency != null -> "Екстрені відключення: графік не діє, коли увімкнуть — невідомо"
             next != null -> "Увімкнуть ${Texts.at(next, o.now)} · через ${Texts.duration(Duration.between(o.now, next))}"
             else -> "Поза графіком — коли увімкнуть, невідомо"
         }
@@ -79,8 +88,8 @@ object LiveContentBuilder {
             text = text,
             detail = battery(o, charging = false),
             chip = "Нема",
-            countdownTo = restoreHint?.latest ?: next,
-            progress = o.progress,
+            countdownTo = restoreHint?.latest ?: next.takeIf { o.emergency == null },
+            progress = o.progress.takeIf { o.emergency == null },
             tone = Tone.OFF,
         )
     }

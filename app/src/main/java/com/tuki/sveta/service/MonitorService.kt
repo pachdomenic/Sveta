@@ -46,6 +46,7 @@ class MonitorService : LifecycleService() {
         lifecycleScope.launch { powerEvents() }
         lifecycleScope.launch { predictionEvents() }
         lifecycleScope.launch { scheduleLoop() }
+        lifecycleScope.launch { emergencyLoop() }
         lifecycleScope.launch { telegramLoop() }
         lifecycleScope.launch {
             // The user switched monitoring off in settings.
@@ -105,6 +106,13 @@ class MonitorService : LifecycleService() {
         }
     }
 
+    private suspend fun emergencyLoop() {
+        while (true) {
+            app.alerts.checkEmergency()
+            delay(EMERGENCY_INTERVAL.toMillis())
+        }
+    }
+
     private suspend fun telegramLoop() {
         var lastPoll = Instant.EPOCH
         while (true) {
@@ -130,6 +138,7 @@ class MonitorService : LifecycleService() {
         private val LIVE_TICK: Duration = Duration.ofSeconds(30)
         private val LIVE_MIN_INTERVAL: Duration = Duration.ofSeconds(2)
         private val SCHEDULE_INTERVAL: Duration = Duration.ofMinutes(10)
+        private val EMERGENCY_INTERVAL: Duration = Duration.ofMinutes(2)
         private val TELEGRAM_INTERVAL: Duration = Duration.ofSeconds(30)
         private val TELEGRAM_INTERVAL_DARK: Duration = Duration.ofSeconds(120)
 
