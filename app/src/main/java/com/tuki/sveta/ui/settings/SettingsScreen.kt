@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -46,8 +47,14 @@ import com.tuki.sveta.data.dtek.DtekParser
 import com.tuki.sveta.data.dtek.PowerGroup
 import com.tuki.sveta.data.ecoflow.Connection
 import com.tuki.sveta.data.store.Settings
+import com.tuki.sveta.domain.AlertPhase
 import com.tuki.sveta.domain.EmergencyStatus
+import com.tuki.sveta.domain.PlannedAlert
+import com.tuki.sveta.domain.PlannedSwitch
+import com.tuki.sveta.domain.SwitchKind
+import com.tuki.sveta.service.Alerts
 import com.tuki.sveta.service.EventTexts
+import com.tuki.sveta.ui.components.ChoiceGroup
 import com.tuki.sveta.ui.components.Dot
 import com.tuki.sveta.ui.components.Hint
 import com.tuki.sveta.ui.components.SectionCard
@@ -92,10 +99,16 @@ fun SettingsScreen(app: AppContainer, contentPadding: PaddingValues, monitoringA
     var batteryExempt by remember { mutableStateOf(context.isIgnoringBatteryOptimizations()) }
     var liveUpdates by remember { mutableStateOf(app.notifications.liveUpdatesAvailable) }
     var canNotify by remember { mutableStateOf(app.notifications.canPost) }
+    var exactAlarms by remember { mutableStateOf(Alerts.exactAlarmsAllowed(context)) }
     LifecycleResumeEffect(Unit) {
         batteryExempt = context.isIgnoringBatteryOptimizations()
         liveUpdates = app.notifications.liveUpdatesAvailable
         canNotify = app.notifications.canPost
+        if (exactAlarms != Alerts.exactAlarmsAllowed(context)) {
+            exactAlarms = !exactAlarms
+            // The pending alarm was armed under the old permission.
+            scope.launch { app.alerts.syncPlanned() }
+        }
         onPauseOrDispose { }
     }
 
@@ -181,6 +194,27 @@ fun SettingsScreen(app: AppContainer, contentPadding: PaddingValues, monitoringA
                     onChange = { on -> update { it.copy(notifyPower = on) } },
                 )
                 SwitchRow(
+                    title = "Вимкнення й увімкнення за графіком",
+                    subtitle = "Нагадування про кожне перемикання у графіку ДТЕК, станція не потрібна",
+                    checked = settings.notifyPlanned,
+                    onChange = { on -> update { it.copy(notifyPlanned = on) } },
+                )
+                AnimatedVisibility(settings.notifyPlanned) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Hint("Попереджати заздалегідь, хв")
+                        ChoiceGroup(
+                            options = Settings.PLANNED_LEAD_OPTIONS,
+                            selected = settings.plannedLeadMinutes,
+                            onSelect = { minutes -> update { it.copy(plannedLeadMinutes = minutes) } },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { minutes -> Text(if (minutes == 0) "ні" else minutes.toString()) }
+                        if (!exactAlarms) {
+                            Hint("Без дозволу на точні будильники система може показати нагадування із запізненням.")
+                            OutlinedButton(onClick = { context.requestExactAlarms() }) { Text("Дозволити точний час") }
+                        }
+                    }
+                }
+                SwitchRow(
                     title = "Новий або змінений графік",
                     subtitle = "ДТЕК опублікував графік на завтра, змінив чи скасував відключення",
                     checked = settings.notifySchedule,
@@ -254,6 +288,11 @@ private fun Diagnostics(app: AppContainer, raw: Map<String, String>) {
                             val text = EventTexts.emergency(sample.copy(active = false, summary = "Київщина: повертаємось до графіків, екстрені відключення скасовано"), app.overview.current())
                             app.notifications.emergency(text.title, text.text, active = false)
                         }) { Text("Скасовано") }
+                        OutlinedButton(onClick = {
+                            val switch = PlannedSwitch(now.plusSeconds(15 * 60), SwitchKind.OFF, now.plusSeconds(4 * 3600 + 15 * 60))
+                            val text = EventTexts.planned(PlannedAlert(switch, AlertPhase.AHEAD, now), now)
+                            app.notifications.planned(text.title, text.text, off = true)
+                        }) { Text("За графіком") }
                     }
                 }
                 val interesting = raw.filterKeys { it.startsWith("inv.") || it.startsWith("pd.watts") || it.startsWith("ems.") && it.endsWith("RemainTime") || it.endsWith(".soc") }

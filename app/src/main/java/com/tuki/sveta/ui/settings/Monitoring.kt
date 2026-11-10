@@ -75,6 +75,13 @@ fun Context.requestIgnoreBatteryOptimizations() {
         .onFailure { runCatching { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } }
 }
 
+/** Android 12+: lets the schedule reminders fire on the minute instead of "sometime around". */
+fun Context.requestExactAlarms() {
+    if (Build.VERSION.SDK_INT < 31) return
+    runCatching { startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, "package:$packageName".toUri())) }
+        .onFailure { runCatching { startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)) } }
+}
+
 fun Context.openPromotedNotificationSettings() {
     val intent = if (Build.VERSION.SDK_INT >= 36) {
         Intent(Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)

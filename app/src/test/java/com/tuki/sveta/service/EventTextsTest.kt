@@ -1,12 +1,16 @@
 package com.tuki.sveta.service
 
 import com.tuki.sveta.data.dtek.ScheduleChange
+import com.tuki.sveta.domain.AlertPhase
 import com.tuki.sveta.domain.DaySchedule
 import com.tuki.sveta.domain.EmergencyStatus
 import com.tuki.sveta.domain.GridState
 import com.tuki.sveta.domain.KyivZone
 import com.tuki.sveta.domain.Overview
+import com.tuki.sveta.domain.PlannedAlert
+import com.tuki.sveta.domain.PlannedSwitch
 import com.tuki.sveta.domain.SlotState
+import com.tuki.sveta.domain.SwitchKind
 import com.tuki.sveta.domain.Timeline
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -20,6 +24,38 @@ class EventTextsTest {
     private val nov9: LocalDate = LocalDate.of(2026, 11, 9)
     private fun at(day: Int, h: Int, m: Int = 0): Instant = LocalDateTime.of(2026, 11, day, h, m).atZone(KyivZone).toInstant()
     private fun day(date: LocalDate, vararg off: IntRange) = DaySchedule(date, List(48) { i -> if (off.any { i in it }) SlotState.OFF else SlotState.ON }, true)
+
+    @Test
+    fun `heads-up before an outage`() {
+        val alert = PlannedAlert(PlannedSwitch(at(9, 18), SwitchKind.OFF, until = at(9, 22)), AlertPhase.AHEAD, at(9, 17, 45))
+        val text = EventTexts.planned(alert, at(9, 17, 45))
+        assertEquals("Вимкнуть о 18:00 · через 15 хв", text.title)
+        assertEquals("За графіком. Відключення 18:00–22:00, 4 год.", text.text)
+    }
+
+    @Test
+    fun `a late heads-up tells the real remaining time`() {
+        val alert = PlannedAlert(PlannedSwitch(at(9, 18), SwitchKind.OFF, until = null), AlertPhase.AHEAD, at(9, 17, 45))
+        val text = EventTexts.planned(alert, at(9, 17, 53))
+        assertEquals("Вимкнуть о 18:00 · через 7 хв", text.title)
+        assertEquals("За графіком. Коли увімкнуть, графік ще не каже.", text.text)
+    }
+
+    @Test
+    fun `heads-up before the power returns`() {
+        val alert = PlannedAlert(PlannedSwitch(at(9, 22), SwitchKind.ON, until = at(10, 2)), AlertPhase.AHEAD, at(9, 21, 30))
+        val text = EventTexts.planned(alert, at(9, 21, 30))
+        assertEquals("Увімкнуть о 22:00 · через 30 хв", text.title)
+        assertEquals("За графіком. Наступне відключення завтра о 02:00.", text.text)
+    }
+
+    @Test
+    fun `alerts at the moment of the switch`() {
+        val off = PlannedAlert(PlannedSwitch(at(9, 22), SwitchKind.OFF, until = at(10, 2)), AlertPhase.NOW, at(9, 22))
+        assertEquals(EventText("За графіком зараз вимикають", "Відключення 22:00–02:00, 4 год."), EventTexts.planned(off, at(9, 22)))
+        val on = PlannedAlert(PlannedSwitch(at(9, 22), SwitchKind.ON, until = null), AlertPhase.NOW, at(9, 22))
+        assertEquals(EventText("За графіком зараз вмикають", "Більше відключень у графіку не видно."), EventTexts.planned(on, at(9, 22)))
+    }
 
     @Test
     fun `new schedule for tomorrow`() {

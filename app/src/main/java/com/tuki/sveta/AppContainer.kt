@@ -16,6 +16,10 @@ import com.tuki.sveta.service.Notifications
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -43,5 +47,15 @@ class AppContainer(context: Context) {
 
     val overview = OverviewSource(schedule, ecoflow, telegram, emergency, history, settings, scope)
     val notifications = Notifications(context.applicationContext)
-    val alerts = Alerts(schedule, emergency, overview, settings, notifications)
+    val alerts = Alerts(context.applicationContext, schedule, emergency, ecoflow, overview, settings, history, notifications)
+
+    init {
+        // Re-arms the schedule reminders on every process start and whenever what they depend on changes.
+        scope.launch {
+            settings.settings
+                .map { listOf(it.onboarded, it.group, it.notifyPlanned, it.plannedLeadMinutes) }
+                .distinctUntilChanged()
+                .collectLatest { alerts.syncPlanned() }
+        }
+    }
 }

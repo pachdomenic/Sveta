@@ -2,8 +2,10 @@ package com.tuki.sveta.service
 
 import com.tuki.sveta.data.dtek.ScheduleChange
 import com.tuki.sveta.data.ecoflow.GridTransition
+import com.tuki.sveta.domain.AlertPhase
 import com.tuki.sveta.domain.EmergencyStatus
 import com.tuki.sveta.domain.Overview
+import com.tuki.sveta.domain.PlannedAlert
 import com.tuki.sveta.domain.Prediction
 import com.tuki.sveta.domain.SwitchKind
 import com.tuki.sveta.domain.Texts
@@ -99,6 +101,29 @@ object EventTexts {
                 else -> "Графік знову діє: увімкнуть ${Texts.at(next, overview.now)}."
             }
             EventText("Екстрені відключення скасовано", "${status.summary}$source\n$back")
+        }
+    }
+
+    /** A reminder about a switch in the published schedule. */
+    fun planned(alert: PlannedAlert, now: Instant): EventText {
+        val switch = alert.switch
+        val off = switch.kind == SwitchKind.OFF
+        val until = switch.until
+        val tail = when {
+            off && until != null -> "Відключення ${Texts.range(switch.at, until)}, ${Texts.duration(Duration.between(switch.at, until))}."
+            off -> "Коли увімкнуть, графік ще не каже."
+            until != null -> "Наступне відключення ${Texts.at(until, now)}."
+            else -> "Більше відключень у графіку не видно."
+        }
+        return when (alert.phase) {
+            AlertPhase.AHEAD -> EventText(
+                "${if (off) "Вимкнуть" else "Увімкнуть"} ${Texts.at(switch.at, now)} · через ${Texts.duration(Duration.between(now, switch.at))}",
+                "За графіком. $tail",
+            )
+            AlertPhase.NOW -> EventText(
+                if (off) "За графіком зараз вимикають" else "За графіком зараз вмикають",
+                tail,
+            )
         }
     }
 }

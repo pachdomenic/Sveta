@@ -45,6 +45,9 @@ class Notifications(private val context: Context) {
                 NotificationChannel(CHANNEL_EMERGENCY, "Екстрені відключення", NotificationManager.IMPORTANCE_HIGH).apply {
                     description = "ДТЕК запровадив або скасував екстрені відключення на Київщині"
                 },
+                NotificationChannel(CHANNEL_PLANNED, "Вимкнення й увімкнення за графіком", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = "Нагадування перед вимкненням та увімкненням світла за графіком"
+                },
             )
         )
     }
@@ -136,7 +139,19 @@ class Notifications(private val context: Context) {
         text = text,
     )
 
+    fun planned(title: String, text: String, off: Boolean) = event(
+        id = ID_PLANNED,
+        channel = CHANNEL_PLANNED,
+        icon = if (off) R.drawable.ic_stat_bolt_off else R.drawable.ic_stat_bolt,
+        color = if (off) R.color.power_off else R.color.power_on,
+        title = title,
+        text = text,
+    )
+
     fun cancelPrediction() = manager.cancel(ID_PREDICT)
+
+    /** A reminder about a schedule that no longer applies would only mislead. */
+    fun cancelPlanned() = manager.cancel(ID_PLANNED)
 
     private fun event(id: Int, channel: String, icon: Int, color: Int, title: String, text: String) {
         if (!canPost) return
@@ -174,11 +189,13 @@ class Notifications(private val context: Context) {
         const val CHANNEL_PREDICT = "predict"
         const val CHANNEL_SCHEDULE = "schedule"
         const val CHANNEL_EMERGENCY = "emergency"
+        const val CHANNEL_PLANNED = "planned"
         const val ID_LIVE = 1
         const val ID_POWER = 2
         const val ID_PREDICT = 3
         const val ID_SCHEDULE = 4
         const val ID_EMERGENCY = 5
+        const val ID_PLANNED = 6
         private const val PROGRESS_MAX = 1000
     }
 }

@@ -22,6 +22,10 @@ data class Settings(
     val notifyPredict: Boolean = true,
     /** Emergency outages announced or called off in [emergencyChannel]. */
     val notifyEmergency: Boolean = true,
+    /** Reminders about the switches in the published schedule. */
+    val notifyPlanned: Boolean = true,
+    /** How long before a scheduled switch to give a heads-up; 0 leaves only the alert at the switch itself. */
+    val plannedLeadMinutes: Int = 15,
     /** Public Telegram channel where DTEK announces emergency outages. */
     val emergencyChannel: String = DEFAULT_EMERGENCY_CHANNEL,
 
@@ -40,6 +44,7 @@ data class Settings(
         const val DEFAULT_ECOFLOW_HOST = "api.ecoflow.com"
         /** The DTEK group's only official channel; every region's announcements go through it. */
         const val DEFAULT_EMERGENCY_CHANNEL = "dtek_ua"
+        val PLANNED_LEAD_OPTIONS = listOf(0, 5, 15, 30, 60)
         val DEFAULT_OFF_WORDS = listOf("вимкн", "відключ", "виключ", "знеструм", "зникло", "без світла", "немає світла", "нема світла", "пропало")
         val DEFAULT_ON_WORDS = listOf("увімкн", "включ", "з'явил", "зʼявил", "заживлен", "є світло", "дали світло", "відновлен")
     }

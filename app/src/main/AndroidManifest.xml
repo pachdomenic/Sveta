@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Schedule reminders ("вимкнуть за 15 хв") are worthless if they arrive half an hour late. Optional: without it the alarms are inexact. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <application
         android:name=".SvetaApp"
@@ -39,6 +41,10 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Holds a persistent MQTT connection to the user's power station to report grid outages the moment they happen" />
         </service>
+
+        <receiver
+            android:name=".service.PlannedAlarmReceiver"
+            android:exported="false" />
 
         <receiver
             android:name=".service.BootReceiver"

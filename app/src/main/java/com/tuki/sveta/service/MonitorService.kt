@@ -47,6 +47,7 @@ class MonitorService : LifecycleService() {
         lifecycleScope.launch { predictionEvents() }
         lifecycleScope.launch { scheduleLoop() }
         lifecycleScope.launch { emergencyLoop() }
+        lifecycleScope.launch { plannedLoop() }
         lifecycleScope.launch { telegramLoop() }
         lifecycleScope.launch {
             // The user switched monitoring off in settings.
@@ -113,6 +114,17 @@ class MonitorService : LifecycleService() {
         }
     }
 
+    /**
+     * The reminders are driven by alarms, but without the exact-alarm permission those can come late.
+     * While the service is up it simply looks at the clock itself.
+     */
+    private suspend fun plannedLoop() {
+        while (true) {
+            app.alerts.syncPlanned()
+            delay(PLANNED_TICK.toMillis())
+        }
+    }
+
     private suspend fun telegramLoop() {
         var lastPoll = Instant.EPOCH
         while (true) {
@@ -139,6 +151,7 @@ class MonitorService : LifecycleService() {
         private val LIVE_MIN_INTERVAL: Duration = Duration.ofSeconds(2)
         private val SCHEDULE_INTERVAL: Duration = Duration.ofMinutes(10)
         private val EMERGENCY_INTERVAL: Duration = Duration.ofMinutes(2)
+        private val PLANNED_TICK: Duration = Duration.ofSeconds(30)
         private val TELEGRAM_INTERVAL: Duration = Duration.ofSeconds(30)
         private val TELEGRAM_INTERVAL_DARK: Duration = Duration.ofSeconds(120)
 
