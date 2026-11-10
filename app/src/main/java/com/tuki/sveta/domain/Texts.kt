@@ -23,6 +23,18 @@ object Texts {
 
     fun minutes(total: Int): String = duration(Duration.ofMinutes(total.toLong()))
 
+    /** As short as it gets, for places with room for six characters: "45 хв", "5 год", "5г10х", "12г30х". */
+    fun compactMinutes(total: Int): String {
+        val hours = total / 60
+        val minutes = total % 60
+        return when {
+            hours == 0 -> "$minutes хв"
+            hours > 99 -> "99+ г"
+            minutes == 0 -> "$hours год"
+            else -> "${hours}г${minutes}х"
+        }
+    }
+
     fun clock(t: Instant): String = CLOCK.format(t.atZone(KyivZone))
 
     /** "о 18:00", "об 11:30", "завтра о 06:30", "12.11 о 09:00". */

@@ -46,6 +46,7 @@ import com.tuki.sveta.BuildConfig
 import com.tuki.sveta.data.dtek.DtekParser
 import com.tuki.sveta.data.dtek.PowerGroup
 import com.tuki.sveta.data.ecoflow.Connection
+import com.tuki.sveta.data.store.LiveChip
 import com.tuki.sveta.data.store.Settings
 import com.tuki.sveta.domain.AlertPhase
 import com.tuki.sveta.domain.EmergencyStatus
@@ -232,13 +233,35 @@ fun SettingsScreen(app: AppContainer, contentPadding: PaddingValues, monitoringA
                 Text(
                     when {
                         Build.VERSION.SDK_INT < 36 -> "Live Updates з'явились в Android 16. На цій версії показується звичайна постійна картка."
-                        liveUpdates -> "Live Updates увімкнено: картка закріплена, у рядку стану — вольтаж або відлік."
+                        liveUpdates -> "Live Updates увімкнено: картка закріплена, у рядку стану — вольтаж, а без світла те, що обрано нижче."
                         else -> "Live Updates вимкнено в системі для цього застосунку."
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (Build.VERSION.SDK_INT >= 36) {
+                    Hint("У рядку стану, коли світла немає")
+                    ChoiceGroup(
+                        options = LiveChip.entries,
+                        selected = settings.liveChip,
+                        onSelect = { choice -> update { it.copy(liveChip = choice) } },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { choice ->
+                        Text(
+                            when (choice) {
+                                LiveChip.COUNTDOWN -> "Відлік"
+                                LiveChip.BATTERY -> "Заряд"
+                                LiveChip.RUNTIME -> "Залишок"
+                            }
+                        )
+                    }
+                    Hint(
+                        when (settings.liveChip) {
+                            LiveChip.COUNTDOWN -> "Час до увімкнення за графіком."
+                            LiveChip.BATTERY -> "Заряд EcoFlow у відсотках. Відлік до увімкнення лишається в самій картці."
+                            LiveChip.RUNTIME -> "На скільки вистачить EcoFlow за поточного навантаження. Відлік до увімкнення лишається в самій картці."
+                        }
+                    )
                     OutlinedButton(onClick = { context.openPromotedNotificationSettings() }) { Text("Налаштування Live Updates") }
                 }
             }

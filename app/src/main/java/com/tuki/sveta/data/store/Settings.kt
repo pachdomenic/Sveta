@@ -26,6 +26,8 @@ data class Settings(
     val notifyPlanned: Boolean = true,
     /** How long before a scheduled switch to give a heads-up; 0 leaves only the alert at the switch itself. */
     val plannedLeadMinutes: Int = 15,
+    /** What the status bar chip of the live card shows while the power is out. */
+    val liveChip: LiveChip = LiveChip.COUNTDOWN,
     /** Public Telegram channel where DTEK announces emergency outages. */
     val emergencyChannel: String = DEFAULT_EMERGENCY_CHANNEL,
 
@@ -48,6 +50,19 @@ data class Settings(
         val DEFAULT_OFF_WORDS = listOf("вимкн", "відключ", "виключ", "знеструм", "зникло", "без світла", "немає світла", "нема світла", "пропало")
         val DEFAULT_ON_WORDS = listOf("увімкн", "включ", "з'явил", "зʼявил", "заживлен", "є світло", "дали світло", "відновлен")
     }
+}
+
+/** The one thing that fits into the status bar chip during an outage. */
+@Serializable
+enum class LiveChip {
+    /** Time left until the power is expected back. */
+    COUNTDOWN,
+
+    /** Station charge, "74%". */
+    BATTERY,
+
+    /** How long the station will last at the current load, "5г10х". */
+    RUNTIME,
 }
 
 /**

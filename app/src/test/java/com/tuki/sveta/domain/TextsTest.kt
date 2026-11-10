@@ -1,12 +1,25 @@
 package com.tuki.sveta.domain
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDateTime
 
 class TextsTest {
+
+    @Test
+    fun `compact minutes fit into the status bar chip`() {
+        assertEquals("0 хв", Texts.compactMinutes(0))
+        assertEquals("45 хв", Texts.compactMinutes(45))
+        assertEquals("5 год", Texts.compactMinutes(300))
+        assertEquals("5г10х", Texts.compactMinutes(310))
+        assertEquals("12г30х", Texts.compactMinutes(750))
+        assertEquals("99г59х", Texts.compactMinutes(5999))
+        assertEquals("99+ г", Texts.compactMinutes(6000))
+        assertTrue((0..7000).all { Texts.compactMinutes(it).length < 7 })
+    }
 
     private fun at(day: Int, h: Int, m: Int = 0): Instant = LocalDateTime.of(2026, 11, day, h, m).atZone(KyivZone).toInstant()
 

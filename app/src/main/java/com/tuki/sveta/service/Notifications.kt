@@ -91,12 +91,13 @@ class Notifications(private val context: Context) {
 
         val countdown = content.countdownTo
         if (countdown != null) {
-            // A future "when" makes the system render a live countdown in the chip and the header.
+            // A future "when" makes the system render a live countdown in the header, and in the chip too
+            // unless there is short critical text, which the chip prefers.
             builder.setWhen(countdown.toEpochMilli()).setShowWhen(true).setUsesChronometer(true).setChronometerCountDown(true)
         } else {
             builder.setShowWhen(false)
-            content.chip?.let(builder::setShortCriticalText)
         }
+        content.chip?.let(builder::setShortCriticalText)
 
         val progress = content.progress
         if (progress != null) {

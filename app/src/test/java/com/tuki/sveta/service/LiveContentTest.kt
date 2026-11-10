@@ -1,5 +1,6 @@
 package com.tuki.sveta.service
 
+import com.tuki.sveta.data.store.LiveChip
 import com.tuki.sveta.domain.DaySchedule
 import com.tuki.sveta.domain.EmergencyStatus
 import com.tuki.sveta.domain.GridState
@@ -86,8 +87,44 @@ class LiveContentTest {
         assertEquals("Світла немає", c.title)
         assertEquals("Увімкнуть о 22:00 · через 3 год", c.text)
         assertEquals(at(22), c.countdownTo)
+        // No chip text, so the chip shows the countdown.
+        assertNull(c.chip)
         assertEquals("Батарея 74 % · вистачить на 5 год 10 хв", c.detail)
         assertEquals(Tone.OFF, c.tone)
+    }
+
+    @Test
+    fun `chip can show the station charge or what is left of it instead of the countdown`() {
+        val o = overview(at(19), GridState.OFF, since = at(17, 52))
+        val battery = LiveContentBuilder.build(o, LiveChip.BATTERY)
+        assertEquals("74%", battery.chip)
+        // The header of the card keeps counting down.
+        assertEquals(at(22), battery.countdownTo)
+
+        val runtime = LiveContentBuilder.build(o, LiveChip.RUNTIME)
+        assertEquals("5г10х", runtime.chip)
+        assertEquals(at(22), runtime.countdownTo)
+        assertEquals(battery.text, runtime.text)
+    }
+
+    @Test
+    fun `chip falls back to the countdown when the station has nothing to say`() {
+        val silent = overview(at(19), GridState.OFF, since = at(17, 52)).copy(batteryPercent = null, dischargeRemainMinutes = null)
+        for (choice in LiveChip.entries) {
+            val c = LiveContentBuilder.build(silent, choice)
+            assertNull(c.chip)
+            assertEquals(at(22), c.countdownTo)
+        }
+        // Charge known, runtime not (the station reports 0 while idle).
+        val idle = overview(at(19), GridState.OFF, since = at(17, 52)).copy(dischargeRemainMinutes = 0)
+        assertNull(LiveContentBuilder.build(idle, LiveChip.RUNTIME).chip)
+    }
+
+    @Test
+    fun `chip choice only matters while the power is out`() {
+        val on = overview(at(15, 46), GridState.ON, volts = 228.3, since = at(12))
+        assertEquals(LiveContentBuilder.build(on), LiveContentBuilder.build(on, LiveChip.BATTERY))
+        assertEquals("228 В", LiveContentBuilder.build(on, LiveChip.RUNTIME).chip)
     }
 
     @Test
@@ -95,6 +132,8 @@ class LiveContentTest {
         val c = LiveContentBuilder.build(overview(at(14), GridState.OFF, since = at(13, 30)))
         assertEquals("Поза графіком — коли увімкнуть, невідомо", c.text)
         assertNull(c.countdownTo)
+        assertEquals("Нема", c.chip)
+        assertEquals("74%", LiveContentBuilder.build(overview(at(14), GridState.OFF, since = at(13, 30)), LiveChip.BATTERY).chip)
         assertNull(c.progress)
     }
 
