@@ -37,7 +37,9 @@ class MonitorService : LifecycleService() {
         ServiceCompat.startForeground(
             this,
             Notifications.ID_LIVE,
-            notifications.live(LiveContentBuilder.build(app.overview.current(), app.settings.settings.value.liveChip)),
+            app.settings.settings.value.let { settings ->
+                if (settings.liveCard) notifications.live(LiveContentBuilder.build(app.overview.current(), settings.liveChip)) else notifications.background()
+            },
             if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0,
         )
         running.value = true
@@ -68,15 +70,22 @@ class MonitorService : LifecycleService() {
     }
 
     private suspend fun liveCard() {
-        app.overview.flow(LIVE_TICK)
-            .combine(app.settings.settings.map { it.liveChip }.distinctUntilChanged(), LiveContentBuilder::build)
-            .distinctUntilChanged()
-            .conflate()
-            .collect { content ->
-                app.notifications.updateLive(content)
-                // The station reports several times a second; the system throttles apps that update that often.
-                delay(LIVE_MIN_INTERVAL.toMillis())
+        app.settings.settings.map { it.liveCard }.distinctUntilChanged().collectLatest { shown ->
+            if (!shown) {
+                // Posted once and left alone: if the user swipes it away it stays away.
+                app.notifications.showBackground()
+                return@collectLatest
             }
+            app.overview.flow(LIVE_TICK)
+                .combine(app.settings.settings.map { it.liveChip }.distinctUntilChanged(), LiveContentBuilder::build)
+                .distinctUntilChanged()
+                .conflate()
+                .collect { content ->
+                    app.notifications.updateLive(content)
+                    // The station reports several times a second; the system throttles apps that update that often.
+                    delay(LIVE_MIN_INTERVAL.toMillis())
+                }
+        }
     }
 
     private suspend fun powerEvents() {

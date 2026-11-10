@@ -230,7 +230,18 @@ fun SettingsScreen(app: AppContainer, contentPadding: PaddingValues, monitoringA
                 emergencySource.error?.let { Text("Канал @${settings.emergencyChannel} недоступний: $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 SwitchRow("Прогноз за сусідніми лініями", settings.notifyPredict, { on -> update { it.copy(notifyPredict = on) } })
 
-                Text(
+                SwitchRow(
+                    title = "Жива картка в шторці",
+                    subtitle = if (settings.liveCard) {
+                        "Сховати можна й кнопкою «Сховати» на самій картці"
+                    } else {
+                        "Сховано: моніторинг і сповіщення працюють, у шторці лишається тихий рядок, який можна змахнути"
+                    },
+                    checked = settings.liveCard,
+                    onChange = { on -> update { it.copy(liveCard = on) } },
+                    enabled = settings.monitoring,
+                )
+                if (settings.liveCard) Text(
                     when {
                         Build.VERSION.SDK_INT < 36 -> "Live Updates з'явились в Android 16. На цій версії показується звичайна постійна картка."
                         liveUpdates -> "Live Updates увімкнено: картка закріплена, у рядку стану — вольтаж, а без світла те, що обрано нижче."
@@ -239,7 +250,7 @@ fun SettingsScreen(app: AppContainer, contentPadding: PaddingValues, monitoringA
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (Build.VERSION.SDK_INT >= 36) {
+                if (Build.VERSION.SDK_INT >= 36 && settings.liveCard) {
                     Hint("У рядку стану, коли світла немає")
                     ChoiceGroup(
                         options = LiveChip.entries,

@@ -26,6 +26,8 @@ data class Settings(
     val notifyPlanned: Boolean = true,
     /** How long before a scheduled switch to give a heads-up; 0 leaves only the alert at the switch itself. */
     val plannedLeadMinutes: Int = 15,
+    /** Show the live card while monitoring. When off, the service keeps a quiet placeholder instead. */
+    val liveCard: Boolean = true,
     /** What the status bar chip of the live card shows while the power is out. */
     val liveChip: LiveChip = LiveChip.COUNTDOWN,
     /** Public Telegram channel where DTEK announces emergency outages. */

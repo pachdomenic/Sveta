@@ -33,6 +33,11 @@ class Notifications(private val context: Context) {
                     enableVibration(false)
                     setShowBadge(false)
                 },
+                // A foreground service cannot run without a notification; this is the least visible one allowed.
+                NotificationChannel(CHANNEL_BACKGROUND, "Робота у фоні", NotificationManager.IMPORTANCE_LOW).apply {
+                    description = "Тихий рядок замість живої картки, коли її сховано"
+                    setShowBadge(false)
+                },
                 NotificationChannel(CHANNEL_POWER, "Світло зникло / з'явилось", NotificationManager.IMPORTANCE_HIGH).apply {
                     description = "Момент, коли EcoFlow помітив зміну напруги в мережі"
                 },
@@ -88,6 +93,7 @@ class Notifications(private val context: Context) {
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setContentIntent(openApp())
             .setRequestPromotedOngoing(true)
+            .addAction(0, "Сховати", LiveCardReceiver.intent(context, show = false))
 
         val countdown = content.countdownTo
         if (countdown != null) {
@@ -116,6 +122,30 @@ class Notifications(private val context: Context) {
 
     fun updateLive(content: LiveContent) {
         if (canPost) notifySafely(ID_LIVE, live(content))
+    }
+
+    /**
+     * What the service shows while the live card is hidden: silent, collapsed, off the lock screen and
+     * not pinned, so on Android 13+ it can simply be swiped away.
+     */
+    fun background(): Notification = NotificationCompat.Builder(context, CHANNEL_BACKGROUND)
+        .setSmallIcon(R.drawable.ic_stat_bolt)
+        .setContentTitle("Свєта стежить за світлом")
+        .setContentText("Живу картку сховано, сповіщення надходять як завжди")
+        .setOngoing(false)
+        .setSilent(true)
+        .setShowWhen(false)
+        .setPriority(NotificationCompat.PRIORITY_LOW)
+        .setCategory(NotificationCompat.CATEGORY_SERVICE)
+        .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+        .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+        .setContentIntent(openApp())
+        .addAction(0, "Показати картку", LiveCardReceiver.intent(context, show = true))
+        .build()
+
+    /** Replaces the live card with the quiet placeholder under the same id, as the service needs one or the other. */
+    fun showBackground() {
+        if (canPost) notifySafely(ID_LIVE, background())
     }
 
     fun powerEvent(title: String, text: String, on: Boolean) = event(
@@ -186,6 +216,7 @@ class Notifications(private val context: Context) {
 
     companion object {
         const val CHANNEL_LIVE = "live"
+        const val CHANNEL_BACKGROUND = "background"
         const val CHANNEL_POWER = "power"
         const val CHANNEL_PREDICT = "predict"
         const val CHANNEL_SCHEDULE = "schedule"

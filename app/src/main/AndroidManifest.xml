@@ -43,6 +43,10 @@
         </service>
 
         <receiver
+            android:name=".service.LiveCardReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".service.PlannedAlarmReceiver"
             android:exported="false" />
 
