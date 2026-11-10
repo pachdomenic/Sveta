@@ -99,11 +99,7 @@ class MonitorService : LifecycleService() {
     private suspend fun scheduleLoop() {
         app.settings.settings.map { it.group }.distinctUntilChanged().collectLatest { group ->
             while (true) {
-                val change = app.schedule.refresh(group)
-                if (change != null && !change.isEmpty && app.settings.settings.value.notifySchedule) {
-                    val text = EventTexts.schedule(change, Instant.now())
-                    app.notifications.scheduleChanged(text.title, text.text)
-                }
+                app.alerts.refreshSchedule(group)
                 delay(SCHEDULE_INTERVAL.toMillis())
             }
         }

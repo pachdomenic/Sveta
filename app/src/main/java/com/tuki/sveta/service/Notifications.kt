@@ -40,7 +40,7 @@ class Notifications(private val context: Context) {
                     description = "Попередження з Telegram-каналів, що скоро вимкнуть"
                 },
                 NotificationChannel(CHANNEL_SCHEDULE, "Зміни графіка", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                    description = "ДТЕК оновив графік для вашої черги"
+                    description = "ДТЕК опублікував, змінив або скасував графік для вашої черги"
                 },
             )
         )

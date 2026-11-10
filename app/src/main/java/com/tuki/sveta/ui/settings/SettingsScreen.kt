@@ -95,6 +95,8 @@ fun SettingsScreen(app: AppContainer, contentPadding: PaddingValues, monitoringA
         onPauseOrDispose { }
     }
 
+    val askNotifications = rememberNotificationPermissionRequest { canNotify = app.notifications.canPost }
+
     LazyColumn(
         contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -158,19 +160,29 @@ fun SettingsScreen(app: AppContainer, contentPadding: PaddingValues, monitoringA
                 SectionTitle("Сповіщення", icon = Icons.Rounded.Notifications)
                 SwitchRow(
                     title = "Фоновий моніторинг",
-                    subtitle = if (monitoringActive) "Працює: жива картка в шторці та сповіщення" else "Вимкнено: дані оновлюються лише у відкритому застосунку",
+                    subtitle = if (monitoringActive) "Працює: жива картка в шторці та миттєві сповіщення" else "Вимкнено: без живої картки, графік перевіряється раз на годину",
                     checked = settings.monitoring,
                     onChange = onMonitoring,
                 )
-                AnimatedVisibility(settings.monitoring && !canNotify) {
+                AnimatedVisibility(!canNotify) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Сповіщення заборонені в системі — картки й попереджень не буде.", color = MaterialTheme.colorScheme.error)
-                        OutlinedButton(onClick = { context.openPromotedNotificationSettings() }) { Text("Відкрити налаштування") }
+                        OutlinedButton(onClick = askNotifications) { Text("Дозволити сповіщення") }
                     }
                 }
-                SwitchRow("Світло зникло / з'явилось", settings.notifyPower, { on -> update { it.copy(notifyPower = on) } })
+                SwitchRow(
+                    title = "Світло зникло / з'явилось",
+                    subtitle = "Справжній момент за даними EcoFlow",
+                    checked = settings.notifyPower,
+                    onChange = { on -> update { it.copy(notifyPower = on) } },
+                )
+                SwitchRow(
+                    title = "Новий або змінений графік",
+                    subtitle = "ДТЕК опублікував графік на завтра, змінив чи скасував відключення",
+                    checked = settings.notifySchedule,
+                    onChange = { on -> update { it.copy(notifySchedule = on) } },
+                )
                 SwitchRow("Прогноз за сусідніми лініями", settings.notifyPredict, { on -> update { it.copy(notifyPredict = on) } })
-                SwitchRow("Зміни графіка ДТЕК", settings.notifySchedule, { on -> update { it.copy(notifySchedule = on) } })
 
                 Text(
                     when {

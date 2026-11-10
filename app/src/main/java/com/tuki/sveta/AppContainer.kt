@@ -10,6 +10,7 @@ import com.tuki.sveta.data.store.SecretStore
 import com.tuki.sveta.data.store.SettingsStore
 import com.tuki.sveta.data.telegram.TelegramChannelScraper
 import com.tuki.sveta.data.telegram.TelegramRepository
+import com.tuki.sveta.service.Alerts
 import com.tuki.sveta.service.Notifications
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,4 +40,5 @@ class AppContainer(context: Context) {
 
     val overview = OverviewSource(schedule, ecoflow, telegram, settings, scope)
     val notifications = Notifications(context.applicationContext)
+    val alerts = Alerts(schedule, settings, notifications)
 }

@@ -64,7 +64,19 @@ object EventTexts {
 
     fun schedule(change: ScheduleChange, now: Instant): EventText {
         val days = (change.changed + change.added).sortedBy { it.date }
-        val title = if (change.changed.isNotEmpty()) "Графік відключень змінено" else "З'явився графік на ${Texts.dayName(change.added.first(), now).lowercase()}"
-        return EventText(title, days.joinToString("\n") { "${Texts.dayName(it, now)}: ${Texts.outages(it)}" })
+        val title = when {
+            // Every day that changed lost all of its outages: that is the news, not "something changed".
+            change.cancelled.isNotEmpty() && change.cancelled.size == days.size ->
+                if (days.size == 1) "Відключення на ${Texts.dayName(days.first(), now).lowercase()} скасовано" else "Відключення скасовано"
+            change.changed.isNotEmpty() -> "Графік відключень змінено"
+            else -> "З'явився графік на ${Texts.dayName(change.added.first(), now).lowercase()}"
+        }
+        return EventText(
+            title,
+            days.joinToString("\n") { day ->
+                val total = if (day.offMinutes > 0) " · разом ${Texts.minutes(day.offMinutes)}" else ""
+                "${Texts.dayName(day, now)}: ${Texts.outages(day)}$total"
+            },
+        )
     }
 }

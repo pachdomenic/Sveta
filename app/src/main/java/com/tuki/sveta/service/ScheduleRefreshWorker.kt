@@ -9,7 +9,6 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.tuki.sveta.container
-import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 /**
@@ -26,12 +25,7 @@ class ScheduleRefreshWorker(context: Context, params: WorkerParameters) : Corout
         }
         if (MonitorService.isRunning.value) return Result.success()
 
-        val change = app.schedule.refresh(settings.group)
-        if (change != null && !change.isEmpty && settings.notifySchedule) {
-            app.notifications.ensureChannels()
-            val text = EventTexts.schedule(change, Instant.now())
-            app.notifications.scheduleChanged(text.title, text.text)
-        }
+        app.alerts.refreshSchedule(settings.group)
         return if (app.schedule.state.value.error == null) Result.success() else Result.retry()
     }
 

@@ -82,7 +82,7 @@ fun ScheduleScreen(app: AppContainer, contentPadding: PaddingValues) {
                     if (state.loading) {
                         LoadingIndicator(Modifier.size(48.dp))
                     } else {
-                        FilledTonalIconButton(onClick = { scope.launch { app.schedule.refresh(settings.group) } }) {
+                        FilledTonalIconButton(onClick = { scope.launch { app.alerts.refreshSchedule(settings.group) } }) {
                             Icon(Icons.Rounded.Refresh, contentDescription = "Оновити графік")
                         }
                     }

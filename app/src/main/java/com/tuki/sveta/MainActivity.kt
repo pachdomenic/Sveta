@@ -30,7 +30,7 @@ class MainActivity : ComponentActivity() {
         val app = container
         // The visible UI keeps its own hold on the station link, so data is live even with monitoring off.
         app.ecoflow.acquire()
-        lifecycleScope.launch { app.schedule.refresh(app.settings.settings.value.group) }
+        lifecycleScope.launch { app.alerts.refreshSchedule() }
         // The system may have killed the service; an open activity is always allowed to bring it back.
         if (app.settings.settings.value.monitoring && !MonitorService.isRunning.value) {
             MonitorService.startIfAllowed(this)
