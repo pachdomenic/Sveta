@@ -56,13 +56,18 @@ object EcoflowMessages {
         // The app reports 5999 / negative values while the estimate is not available.
         fun minutes(key: String): Int? = int(key)?.let { if (it < 0 || it > 5000) 0 else it }
 
+        // The best source in this push, used only if it is at least as trusted as the one we already have.
+        val soc = SocSource.entries.reversed().firstNotNullOfOrNull { src -> int(src.key)?.let { src to it } }
+            ?.takeIf { (src, _) -> previous.batterySource == null || src >= previous.batterySource }
+
         return previous.copy(
             acInVolts = double("inv.acInVol")?.let(::millivoltsToVolts) ?: previous.acInVolts,
             acInWatts = int("inv.inputWatts") ?: previous.acInWatts,
             acOutWatts = int("inv.outputWatts") ?: previous.acOutWatts,
             totalInWatts = int("pd.wattsInSum") ?: previous.totalInWatts,
             totalOutWatts = int("pd.wattsOutSum") ?: previous.totalOutWatts,
-            batteryPercent = int("bmsMaster.soc") ?: int("pd.soc") ?: int("ems.lcdShowSoc") ?: previous.batteryPercent,
+            batteryPercent = soc?.second ?: previous.batteryPercent,
+            batterySource = soc?.first ?: previous.batterySource,
             chargeRemainMinutes = minutes("ems.chgRemainTime") ?: previous.chargeRemainMinutes,
             dischargeRemainMinutes = minutes("ems.dsgRemainTime") ?: previous.dischargeRemainMinutes,
             updatedAt = now,

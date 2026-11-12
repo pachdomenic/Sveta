@@ -68,6 +68,25 @@ class EcoflowMessagesTest {
     }
 
     @Test
+    fun `with an extra battery the combined charge is not overwritten by the main pack`() {
+        fun push(prev: StationSnapshot, json: String) =
+            EcoflowMessages.merge(prev, EcoflowMessages.parseProperty(json.toByteArray())!!, now)
+
+        // Before anything better arrives, the main pack is all we know.
+        var s = push(StationSnapshot(), """{"params":{"bmsMaster.soc":90}}""")
+        assertEquals(90, s.batteryPercent)
+        s = push(s, """{"params":{"ems.lcdShowSoc":63}}""")
+        assertEquals(63, s.batteryPercent)
+        // Main pack and pd pushes keep coming, but the station's own display value wins.
+        s = push(s, """{"params":{"bmsMaster.soc":91,"bmsSlave1.soc":35}}""")
+        assertEquals(63, s.batteryPercent)
+        s = push(s, """{"params":{"pd.soc":62}}""")
+        assertEquals(63, s.batteryPercent)
+        s = push(s, """{"params":{"ems.lcdShowSoc":64}}""")
+        assertEquals(64, s.batteryPercent)
+    }
+
+    @Test
     fun `zero volts means the grid is gone`() {
         val s = EcoflowMessages.merge(
             StationSnapshot(acInVolts = 230.0),

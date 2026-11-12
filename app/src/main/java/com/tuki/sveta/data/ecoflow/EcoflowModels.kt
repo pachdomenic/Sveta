@@ -15,11 +15,25 @@ data class StationSnapshot(
     val acOutWatts: Int? = null,
     val totalInWatts: Int? = null,
     val totalOutWatts: Int? = null,
+    /** Charge of the whole station, extra batteries included, as the station's own screen shows it. */
     val batteryPercent: Int? = null,
+    /** Which quota [batteryPercent] came from; a less trusted one never overwrites a better one. */
+    val batterySource: SocSource? = null,
     val chargeRemainMinutes: Int? = null,
     val dischargeRemainMinutes: Int? = null,
     val updatedAt: Instant? = null,
 )
+
+/**
+ * Quotas that carry a state of charge, from least to most trusted. With an extra battery attached,
+ * `bmsMaster.soc` is the main pack alone while the others are the combined charge, and they arrive in
+ * separate pushes, so taking whichever came last makes the percentage jump back and forth.
+ */
+enum class SocSource(val key: String) {
+    MAIN_PACK("bmsMaster.soc"),
+    COMBINED("pd.soc"),
+    DISPLAY("ems.lcdShowSoc"),
+}
 
 sealed interface Connection {
     data object NotConfigured : Connection

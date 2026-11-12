@@ -220,7 +220,7 @@ private fun Diagnostics(app: AppContainer, raw: Map<String, String>) {
                         OutlinedButton(onClick = { app.ecoflow.simulateVoltage(229.0) }) { Text("З'явилось") }
                     }
                 }
-                val interesting = raw.filterKeys { it.startsWith("inv.") || it.startsWith("pd.watts") || it.startsWith("ems.") && it.endsWith("RemainTime") || it.endsWith(".soc") }
+                val interesting = raw.filterKeys { it.startsWith("inv.") || it.startsWith("pd.watts") || it.startsWith("ems.") && it.endsWith("RemainTime") || it.endsWith("soc", ignoreCase = true) }
                 if (interesting.isEmpty()) {
                     Hint("Станція ще не надіслала жодного параметра. Якщо підключено, а тут порожньо — перевір серійний номер.")
                 } else {
