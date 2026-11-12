@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tuki.sveta.AppContainer
+import com.tuki.sveta.data.dtek.DtekParser
 import com.tuki.sveta.domain.DaySchedule
 import com.tuki.sveta.domain.Interval
 import com.tuki.sveta.domain.KyivZone
@@ -76,18 +77,18 @@ fun ScheduleScreen(app: AppContainer, contentPadding: PaddingValues) {
             SectionCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text(Texts.queue(settings.group), style = MaterialTheme.typography.headlineSmallEmphasized)
-                        Hint("ДТЕК Київські регіональні електромережі")
+                        Text(DtekParser.groupTitle(state.payloadFor(settings.dtekRegion), settings.group), style = MaterialTheme.typography.headlineSmallEmphasized)
+                        Hint(settings.dtekRegion.operator)
                     }
                     if (state.loading) {
                         LoadingIndicator(Modifier.size(48.dp))
                     } else {
-                        FilledTonalIconButton(onClick = { scope.launch { app.schedule.refresh(settings.group) } }) {
+                        FilledTonalIconButton(onClick = { scope.launch { app.schedule.refresh(settings.dtekRegion, settings.group) } }) {
                             Icon(Icons.Rounded.Refresh, contentDescription = "Оновити графік")
                         }
                     }
                 }
-                state.payload?.fact?.update?.takeIf { it.isNotBlank() }?.let { Hint("ДТЕК оновив графік: $it") }
+                state.payloadFor(settings.dtekRegion)?.fact?.update?.takeIf { it.isNotBlank() }?.let { Hint("ДТЕК оновив графік: $it") }
                 state.checkedAt?.let { Hint("Востаннє перевірено: ${Texts.past(it, now)}") }
                 state.error?.let { Text("Не вдалося оновити: $it", color = MaterialTheme.colorScheme.error) }
             }

@@ -6,6 +6,7 @@ import com.tuki.sveta.domain.SlotState
 import com.tuki.sveta.domain.SlotState.MAYBE
 import com.tuki.sveta.domain.SlotState.OFF
 import com.tuki.sveta.domain.SlotState.ON
+import com.tuki.sveta.domain.Texts
 import kotlinx.serialization.json.Json
 import java.time.Instant
 import java.time.LocalDate
@@ -18,14 +19,21 @@ object DtekParser {
 
     fun encode(payload: DtekPayload): String = json.encodeToString(DtekPayload.serializer(), payload)
 
+    /**
+     * Queues that have a schedule of either kind. The name table alone is not enough to go by: Kyiv
+     * lists twice as many names as it has queues.
+     */
     fun groups(payload: DtekPayload): List<PowerGroup> {
-        val ids = payload.preset.groupNames.keys.ifEmpty {
-            payload.fact.data.values.firstOrNull()?.keys ?: payload.preset.data.keys
-        }
+        val ids = (payload.preset.data.keys + payload.fact.data.values.flatMap { it.keys })
+            .ifEmpty { payload.preset.groupNames.keys }
         return ids
             .sortedWith(compareBy({ it.groupNumber() }, { it }))
-            .map { PowerGroup(it, payload.preset.groupNames[it] ?: it.removePrefix("GPV").let { n -> "Черга $n" }) }
+            .map { PowerGroup(it, groupTitle(payload, it)) }
     }
+
+    /** "Черга 3.1", or whatever DTEK calls the queue ("ЦЕК 1.1"); works before anything is downloaded. */
+    fun groupTitle(payload: DtekPayload?, group: String): String =
+        payload?.preset?.groupNames?.get(group)?.takeIf { it.isNotBlank() } ?: Texts.queue(group)
 
     /** Published days for [group], oldest first. */
     fun factDays(payload: DtekPayload, group: String): List<DaySchedule> =

@@ -38,13 +38,19 @@ class OverviewSource(
         }
     }.distinctUntilChanged()
 
-    /** Today and tomorrow for the selected queue; rebuilt when the data, the queue or the date changes. */
+    /**
+     * Today and tomorrow for the selected queue; rebuilt when the data, the region, the queue or the date
+     * changes. Empty while the loaded schedule is still the previous region's.
+     */
     val timeline: StateFlow<Timeline?> = combine(
-        schedule.state.map { it.payload }.distinctUntilChanged(),
-        settings.settings.map { it.group }.distinctUntilChanged(),
+        schedule.state.map { it.region to it.payload }.distinctUntilChanged(),
+        settings.settings.map { it.dtekRegion to it.group }.distinctUntilChanged(),
         today,
-    ) { payload, group, date ->
-        payload?.let { DtekParser.days(it, group, date, count = 2) }?.takeIf { it.isNotEmpty() }?.let(::Timeline)
+    ) { (loaded, payload), (region, group), date ->
+        payload?.takeIf { loaded == region }
+            ?.let { DtekParser.days(it, group, date, count = 2) }
+            ?.takeIf { it.isNotEmpty() }
+            ?.let(::Timeline)
     }.stateIn(scope, SharingStarted.Eagerly, null)
 
     fun current(): Overview {

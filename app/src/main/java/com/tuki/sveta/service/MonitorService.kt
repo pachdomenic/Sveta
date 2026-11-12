@@ -99,9 +99,9 @@ class MonitorService : LifecycleService() {
     }
 
     private suspend fun scheduleLoop() {
-        app.settings.settings.map { it.group }.distinctUntilChanged().collectLatest { group ->
+        app.settings.settings.map { it.dtekRegion to it.group }.distinctUntilChanged().collectLatest { (region, group) ->
             while (true) {
-                val change = app.schedule.refresh(group)
+                val change = app.schedule.refresh(region, group)
                 if (change != null && !change.isEmpty && app.settings.settings.value.notifySchedule) {
                     val text = EventTexts.schedule(change, Instant.now())
                     app.notifications.scheduleChanged(text.title, text.text)

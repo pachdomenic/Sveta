@@ -26,7 +26,7 @@ class ScheduleRefreshWorker(context: Context, params: WorkerParameters) : Corout
         }
         if (MonitorService.isRunning.value) return Result.success()
 
-        val change = app.schedule.refresh(settings.group)
+        val change = app.schedule.refresh(settings.dtekRegion, settings.group)
         if (change != null && !change.isEmpty && settings.notifySchedule) {
             app.notifications.ensureChannels()
             val text = EventTexts.schedule(change, Instant.now())

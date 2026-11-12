@@ -50,16 +50,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tuki.sveta.AppContainer
-import com.tuki.sveta.data.dtek.DtekParser
 import com.tuki.sveta.ui.components.Hint
-import com.tuki.sveta.ui.settings.DefaultGroups
 import com.tuki.sveta.ui.settings.EcoflowForm
-import com.tuki.sveta.ui.settings.GroupPicker
+import com.tuki.sveta.ui.settings.RegionAndGroupPicker
 import kotlinx.coroutines.launch
 
 private const val STEPS = 3
 
-/** First-run flow: queue, station account, background monitoring. Every step after the first is optional. */
+/** First-run flow: region and queue, station account, background monitoring. Every step after the first is optional. */
 @Composable
 fun OnboardingScreen(app: AppContainer, onMonitoring: (Boolean) -> Unit) {
     val settings by app.settings.settings.collectAsStateWithLifecycle()
@@ -96,13 +94,9 @@ fun OnboardingScreen(app: AppContainer, onMonitoring: (Boolean) -> Unit) {
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     when (current) {
                         0 -> {
-                            StepHeader(Icons.Rounded.Numbers, "Яка в тебе черга?", "Свєта показує графік ДТЕК Київські регіональні електромережі для твоєї черги.")
-                            GroupPicker(
-                                groups = schedule.payload?.let(DtekParser::groups)?.takeIf { it.isNotEmpty() } ?: DefaultGroups,
-                                selected = settings.group,
-                                onSelect = { id -> scope.launch { app.settings.update { it.copy(group = id) } } },
-                            )
-                            Hint("Не знаєш чергу? Подивись на dtek-krem.com.ua → «Графіки відключень», ввівши адресу. Змінити можна будь-коли в налаштуваннях.")
+                            StepHeader(Icons.Rounded.Numbers, "Де ти і яка в тебе черга?", "Свєта показує графік відключень ДТЕК для твоєї черги: Київ, Київська, Дніпропетровська та Одеська області.")
+                            RegionAndGroupPicker(app, settings, schedule)
+                            Hint("Змінити можна будь-коли в налаштуваннях.")
                         }
 
                         1 -> {

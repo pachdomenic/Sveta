@@ -43,7 +43,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tuki.sveta.AppContainer
 import com.tuki.sveta.BuildConfig
 import com.tuki.sveta.data.dtek.DtekParser
+import com.tuki.sveta.data.dtek.DtekRegion
 import com.tuki.sveta.data.dtek.PowerGroup
+import com.tuki.sveta.data.dtek.ScheduleState
 import com.tuki.sveta.data.ecoflow.Connection
 import com.tuki.sveta.data.store.Settings
 import com.tuki.sveta.ui.components.Dot
@@ -66,9 +68,40 @@ fun GroupPicker(groups: List<PowerGroup>, selected: String, onSelect: (String) -
             FilterChip(
                 selected = group.id == selected,
                 onClick = { onSelect(group.id) },
-                label = { Text(group.id.removePrefix("GPV"), style = MaterialTheme.typography.titleMedium) },
+                label = { Text(group.short, style = MaterialTheme.typography.titleMedium) },
             )
         }
+    }
+}
+
+@Composable
+fun RegionPicker(selected: DtekRegion, onSelect: (DtekRegion) -> Unit, modifier: Modifier = Modifier) {
+    FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        DtekRegion.entries.forEach { region ->
+            FilterChip(
+                selected = region == selected,
+                onClick = { if (region != selected) onSelect(region) },
+                label = { Text(region.title, style = MaterialTheme.typography.titleMedium) },
+            )
+        }
+    }
+}
+
+/** Region and queue together, as shown in onboarding and in settings. */
+@Composable
+fun RegionAndGroupPicker(app: AppContainer, settings: Settings, schedule: ScheduleState, modifier: Modifier = Modifier) {
+    val region = settings.dtekRegion
+    val payload = schedule.payloadFor(region)
+    val groups = remember(payload) { payload?.let(DtekParser::groups)?.takeIf { it.isNotEmpty() } ?: DefaultGroups }
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // On the app scope: the queue check that follows the download must outlive this screen.
+        RegionPicker(region, onSelect = { picked -> app.scope.launch { app.selectRegion(picked) } })
+        Hint("${region.operator}. Дізнатись свою чергу можна на ${region.site} → «Графіки відключень» за адресою.")
+        GroupPicker(
+            groups = groups,
+            selected = settings.group,
+            onSelect = { id -> app.scope.launch { app.settings.update { it.copy(group = id) } } },
+        )
     }
 }
 
@@ -102,13 +135,8 @@ fun SettingsScreen(app: AppContainer, contentPadding: PaddingValues, monitoringA
     ) {
         item {
             SectionCard {
-                SectionTitle("Черга відключень", icon = Icons.Rounded.Numbers)
-                Hint("Дізнатись свою чергу можна на dtek-krem.com.ua → «Графіки відключень» за адресою.")
-                GroupPicker(
-                    groups = schedule.payload?.let(DtekParser::groups)?.takeIf { it.isNotEmpty() } ?: DefaultGroups,
-                    selected = settings.group,
-                    onSelect = { id -> update { it.copy(group = id) } },
-                )
+                SectionTitle("Регіон і черга", icon = Icons.Rounded.Numbers)
+                RegionAndGroupPicker(app, settings, schedule)
             }
         }
 
