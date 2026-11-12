@@ -60,6 +60,8 @@ object Texts {
 
     fun volts(v: Double): String = "${v.roundToInt()} В"
 
+    fun watts(w: Int): String = "$w Вт"
+
     fun queue(groupId: String): String = "Черга ${groupId.removePrefix("GPV")}"
 
     /** "02:00–06:30, 13:30–21:00" or a note that the day is clear. */

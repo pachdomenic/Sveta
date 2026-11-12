@@ -20,6 +20,8 @@ data class Settings(
     val notifyPower: Boolean = true,
     val notifySchedule: Boolean = true,
     val notifyPredict: Boolean = true,
+    /** Show how many watts go into or out of the battery on the live card. */
+    val liveWatts: Boolean = true,
 
     /** Public Telegram channel usernames without "@". */
     val channels: List<String> = emptyList(),

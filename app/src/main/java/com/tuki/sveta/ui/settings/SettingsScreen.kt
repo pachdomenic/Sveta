@@ -171,6 +171,12 @@ fun SettingsScreen(app: AppContainer, contentPadding: PaddingValues, monitoringA
                 SwitchRow("Світло зникло / з'явилось", settings.notifyPower, { on -> update { it.copy(notifyPower = on) } })
                 SwitchRow("Прогноз за сусідніми лініями", settings.notifyPredict, { on -> update { it.copy(notifyPredict = on) } })
                 SwitchRow("Зміни графіка ДТЕК", settings.notifySchedule, { on -> update { it.copy(notifySchedule = on) } })
+                SwitchRow(
+                    title = "Потужність у живій картці",
+                    subtitle = "Скільки ват іде в батарею під час заряду або з неї під час розряду",
+                    checked = settings.liveWatts,
+                    onChange = { on -> update { it.copy(liveWatts = on) } },
+                )
 
                 Text(
                     when {

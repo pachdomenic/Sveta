@@ -88,7 +88,7 @@ fun HomeScreen(
     val settings by app.settings.settings.collectAsStateWithLifecycle()
     val history by app.history.history.collectAsStateWithLifecycle()
     val schedule by app.schedule.state.collectAsStateWithLifecycle()
-    val content = LiveContentBuilder.build(overview)
+    val content = LiveContentBuilder.build(overview, settings.liveWatts)
 
     LazyColumn(
         contentPadding = contentPadding,

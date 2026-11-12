@@ -24,12 +24,13 @@ data class LiveContent(
 
 object LiveContentBuilder {
 
-    fun build(o: Overview): LiveContent {
+    /** @param watts also show the battery's charge or discharge power. */
+    fun build(o: Overview, watts: Boolean = false): LiveContent {
         val prediction = o.activePrediction
         return when {
-            prediction != null && prediction.kind == SwitchKind.OFF -> warning(o)
-            o.effectiveOn == true -> on(o)
-            o.effectiveOn == false -> off(o)
+            prediction != null && prediction.kind == SwitchKind.OFF -> warning(o, watts)
+            o.effectiveOn == true -> on(o, watts)
+            o.effectiveOn == false -> off(o, watts)
             else -> LiveContent(
                 title = "Немає даних",
                 text = "Графік ще не завантажено, станція не відповідає",
@@ -38,7 +39,7 @@ object LiveContentBuilder {
         }
     }
 
-    private fun on(o: Overview): LiveContent {
+    private fun on(o: Overview, watts: Boolean): LiveContent {
         val next = o.nextSwitch
         val title = when {
             !o.measured -> "За графіком світло є"
@@ -53,7 +54,7 @@ object LiveContentBuilder {
         return LiveContent(
             title = title,
             text = text,
-            detail = battery(o, charging = true),
+            detail = battery(o, charging = true, watts),
             chip = o.volts?.takeIf { o.measured }?.let(Texts::volts),
             countdownTo = null,
             progress = o.progress,
@@ -61,7 +62,7 @@ object LiveContentBuilder {
         )
     }
 
-    private fun off(o: Overview): LiveContent {
+    private fun off(o: Overview, watts: Boolean): LiveContent {
         val next = o.nextSwitch
         val restoreHint = o.activePrediction?.takeIf { it.kind == SwitchKind.ON }
         val title = when {
@@ -77,7 +78,7 @@ object LiveContentBuilder {
         return LiveContent(
             title = title,
             text = text,
-            detail = battery(o, charging = false),
+            detail = battery(o, charging = false, watts),
             chip = "Нема",
             countdownTo = restoreHint?.latest ?: next,
             progress = o.progress,
@@ -85,7 +86,7 @@ object LiveContentBuilder {
         )
     }
 
-    private fun warning(o: Overview): LiveContent {
+    private fun warning(o: Overview, watts: Boolean): LiveContent {
         val p = o.activePrediction!!
         val late = o.now.isAfter(p.earliest)
         val volts = o.volts?.takeIf { o.grid == GridState.ON }?.let { " · ${Texts.volts(it)}" }.orEmpty()
@@ -97,7 +98,7 @@ object LiveContentBuilder {
         return LiveContent(
             title = "Скоро можуть вимкнути$volts",
             text = "«${p.trigger.watchName}» без світла з ${Texts.clock(p.trigger.at)}. Наша черга: ${Texts.range(p.earliest, p.latest)}",
-            detail = listOfNotNull("@${p.trigger.channel}, $basis", battery(o, charging = true)).joinToString(" · "),
+            detail = listOfNotNull("@${p.trigger.channel}, $basis", battery(o, charging = true, watts)).joinToString(" · "),
             chip = null,
             countdownTo = if (late) p.latest else p.earliest,
             progress = run {
@@ -108,14 +109,30 @@ object LiveContentBuilder {
         )
     }
 
-    private fun battery(o: Overview, charging: Boolean): String? {
+    private fun battery(o: Overview, charging: Boolean, watts: Boolean): String? {
         val percent = o.batteryPercent ?: return null
+        val power = if (watts) power(o, percent) else null
         val tail = when {
             !charging && (o.dischargeRemainMinutes ?: 0) > 0 -> " · вистачить на ${Texts.minutes(o.dischargeRemainMinutes!!)}"
             charging && percent < 100 && (o.chargeRemainMinutes ?: 0) > 0 && (o.inputWatts ?: 0) > 0 ->
                 " · до повного ${Texts.minutes(o.chargeRemainMinutes!!)}"
             else -> ""
         }
-        return "Батарея $percent %$tail"
+        return "Батарея $percent %${power?.let { " · $it" }.orEmpty()}$tail"
     }
+
+    /**
+     * What flows into or out of the battery: total input minus total output, so a load running through
+     * from the grid is not counted as charging. Small differences are inverter losses, not real flow.
+     */
+    private fun power(o: Overview, percent: Int): String? {
+        val net = (o.inputWatts ?: return null) - (o.outputWatts ?: return null)
+        return when {
+            net >= POWER_NOISE_WATTS && percent < 100 -> "заряд ${Texts.watts(net)}"
+            net <= -POWER_NOISE_WATTS -> "розряд ${Texts.watts(-net)}"
+            else -> null
+        }
+    }
+
+    private const val POWER_NOISE_WATTS = 10
 }

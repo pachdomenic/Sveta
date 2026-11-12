@@ -114,6 +114,22 @@ class LiveContentTest {
     }
 
     @Test
+    fun `battery power is shown while charging and discharging`() {
+        fun detail(grid: GridState, now: Instant, percent: Int, inW: Int, outW: Int, watts: Boolean = true) =
+            LiveContentBuilder.build(
+                Overview(now, grid, false, null, null, timeline, null, percent, 93, 310, inW, outW),
+                watts,
+            ).detail
+
+        // Grid load passes through, only the rest goes into the battery.
+        assertEquals("Батарея 74 % · заряд 650 Вт · до повного 1 год 33 хв", detail(GridState.ON, at(15), 74, 800, 150))
+        assertEquals("Батарея 74 % · розряд 150 Вт · вистачить на 5 год 10 хв", detail(GridState.OFF, at(19), 74, 0, 150))
+        // Full battery feeding the load from the grid: nothing flows, inverter losses are not charging.
+        assertEquals("Батарея 100 %", detail(GridState.ON, at(15), 100, 158, 150))
+        assertEquals("Батарея 74 % · до повного 1 год 33 хв", detail(GridState.ON, at(15), 74, 800, 150, watts = false))
+    }
+
+    @Test
     fun `nothing known at all`() {
         assertEquals("Немає даних", LiveContentBuilder.build(overview(at(11), GridState.UNKNOWN, timeline = null)).title)
     }

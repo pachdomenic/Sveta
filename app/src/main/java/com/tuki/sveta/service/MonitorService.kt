@@ -14,6 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -36,7 +37,7 @@ class MonitorService : LifecycleService() {
         ServiceCompat.startForeground(
             this,
             Notifications.ID_LIVE,
-            notifications.live(LiveContentBuilder.build(app.overview.current())),
+            notifications.live(LiveContentBuilder.build(app.overview.current(), app.settings.settings.value.liveWatts)),
             if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0,
         )
         running.value = true
@@ -65,8 +66,9 @@ class MonitorService : LifecycleService() {
     }
 
     private suspend fun liveCard() {
-        app.overview.flow(LIVE_TICK)
-            .map(LiveContentBuilder::build)
+        combine(app.overview.flow(LIVE_TICK), app.settings.settings.map { it.liveWatts }.distinctUntilChanged()) { o, watts ->
+            LiveContentBuilder.build(o, watts)
+        }
             .distinctUntilChanged()
             .conflate()
             .collect { content ->
