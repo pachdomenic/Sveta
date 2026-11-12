@@ -91,6 +91,23 @@ class ScheduleRepositoryTest {
     }
 
     @Test
+    fun `a day that loses every outage is reported as cancelled`() {
+        val old = DtekParser.parse(snapshot)
+        val day = old.fact.data.getValue("1794261600")
+        val clear = day + ("GPV3.1" to day.getValue("GPV3.1").mapValues { "yes" })
+        val new = old.copy(fact = old.fact.copy(data = old.fact.data + ("1794261600" to clear)))
+
+        val change = ScheduleRepository.diff(old, new, "GPV3.1", nov9)
+        assertEquals(listOf(nov9.plusDays(1)), change.changed.map { it.date })
+        assertEquals(change.changed, change.cancelled)
+
+        // Losing one hour is a change, not a cancellation.
+        val shorter = ScheduleRepository.diff(old, DtekParser.parse(edited("GPV3.1", "1794261600", 1, "yes")), "GPV3.1", nov9)
+        assertEquals(1, shorter.changed.size)
+        assertTrue(shorter.cancelled.isEmpty())
+    }
+
+    @Test
     fun `past days are ignored in the diff`() {
         val old = DtekParser.parse(snapshot)
         val new = DtekParser.parse(edited("GPV3.1", "1794175200", 9, "no"))

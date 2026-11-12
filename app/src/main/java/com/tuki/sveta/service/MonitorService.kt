@@ -9,7 +9,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.tuki.sveta.container
+import com.tuki.sveta.data.store.Settings
+import com.tuki.sveta.domain.EventWatch
 import com.tuki.sveta.domain.GridState
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,16 +40,29 @@ class MonitorService : LifecycleService() {
         ServiceCompat.startForeground(
             this,
             Notifications.ID_LIVE,
-            notifications.live(LiveContentBuilder.build(app.overview.current(), app.settings.settings.value.liveWatts)),
+            app.settings.settings.value.let { settings ->
+                when {
+                    settings.liveCardVisible(System.currentTimeMillis()) ->
+                        notifications.live(
+                            LiveContentBuilder.build(app.overview.current(), settings.liveChip, settings.liveWatts),
+                            settings.liveHideMinutes,
+                        )
+                    settings.liveCard -> notifications.background(settings.liveHiddenUntil)
+                    else -> notifications.background(hiddenUntil = null)
+                }
+            },
             if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0,
         )
         running.value = true
         app.ecoflow.acquire()
 
         lifecycleScope.launch { liveCard() }
+        lifecycleScope.launch { revealOnEvents() }
         lifecycleScope.launch { powerEvents() }
         lifecycleScope.launch { predictionEvents() }
         lifecycleScope.launch { scheduleLoop() }
+        lifecycleScope.launch { emergencyLoop() }
+        lifecycleScope.launch { plannedLoop() }
         lifecycleScope.launch { telegramLoop() }
         lifecycleScope.launch {
             // The user switched monitoring off in settings.
@@ -66,16 +82,41 @@ class MonitorService : LifecycleService() {
     }
 
     private suspend fun liveCard() {
-        combine(app.overview.flow(LIVE_TICK), app.settings.settings.map { it.liveWatts }.distinctUntilChanged()) { o, watts ->
-            LiveContentBuilder.build(o, watts)
-        }
-            .distinctUntilChanged()
-            .conflate()
-            .collect { content ->
-                app.notifications.updateLive(content)
-                // The station reports several times a second; the system throttles apps that update that often.
-                delay(LIVE_MIN_INTERVAL.toMillis())
+        app.settings.settings.map { it.liveCard to it.liveHiddenUntil }.distinctUntilChanged().collectLatest { (enabled, hiddenUntil) ->
+            // The placeholder is posted once and left alone: if the user swipes it away it stays away.
+            if (!enabled) {
+                app.notifications.showBackground(hiddenUntil = null)
+                return@collectLatest
             }
+            val wait = hiddenUntil - System.currentTimeMillis()
+            if (wait > 0) {
+                app.notifications.showBackground(hiddenUntil)
+                // Put away by the button on the card: it comes back by itself, when the time is up or,
+                // if it waits for an event, when revealOnEvents() clears the setting and restarts this block.
+                if (hiddenUntil == Settings.UNTIL_EVENT) awaitCancellation() else delay(wait)
+            }
+            app.overview.flow(LIVE_TICK)
+                .combine(app.settings.settings.map { Triple(it.liveChip, it.liveWatts, it.liveHideMinutes) }.distinctUntilChanged()) { overview, (chip, watts, hideMinutes) ->
+                    LiveContentBuilder.build(overview, chip, watts) to hideMinutes
+                }
+                .distinctUntilChanged()
+                .conflate()
+                .collect { (content, hideMinutes) ->
+                    app.notifications.updateLive(content, hideMinutes)
+                    // The station reports several times a second; the system throttles apps that update that often.
+                    delay(LIVE_MIN_INTERVAL.toMillis())
+                }
+        }
+    }
+
+    /** Brings back a card that was hidden "until something happens". */
+    private suspend fun revealOnEvents() {
+        val watch = EventWatch()
+        app.overview.flow(LIVE_TICK).collect { overview ->
+            if (watch.happened(overview) && app.settings.settings.value.liveHiddenUntil == Settings.UNTIL_EVENT) {
+                app.settings.update { it.liveCardRevealedByEvent() }
+            }
+        }
     }
 
     private suspend fun powerEvents() {
@@ -101,13 +142,27 @@ class MonitorService : LifecycleService() {
     private suspend fun scheduleLoop() {
         app.settings.settings.map { it.dtekRegion to it.group }.distinctUntilChanged().collectLatest { (region, group) ->
             while (true) {
-                val change = app.schedule.refresh(region, group)
-                if (change != null && !change.isEmpty && app.settings.settings.value.notifySchedule) {
-                    val text = EventTexts.schedule(change, Instant.now())
-                    app.notifications.scheduleChanged(text.title, text.text)
-                }
+                app.alerts.refreshSchedule(region, group)
                 delay(SCHEDULE_INTERVAL.toMillis())
             }
+        }
+    }
+
+    private suspend fun emergencyLoop() {
+        while (true) {
+            app.alerts.checkEmergency()
+            delay(EMERGENCY_INTERVAL.toMillis())
+        }
+    }
+
+    /**
+     * The reminders are driven by alarms, but without the exact-alarm permission those can come late.
+     * While the service is up it simply looks at the clock itself.
+     */
+    private suspend fun plannedLoop() {
+        while (true) {
+            app.alerts.syncPlanned()
+            delay(PLANNED_TICK.toMillis())
         }
     }
 
@@ -136,6 +191,8 @@ class MonitorService : LifecycleService() {
         private val LIVE_TICK: Duration = Duration.ofSeconds(30)
         private val LIVE_MIN_INTERVAL: Duration = Duration.ofSeconds(2)
         private val SCHEDULE_INTERVAL: Duration = Duration.ofMinutes(10)
+        private val EMERGENCY_INTERVAL: Duration = Duration.ofMinutes(2)
+        private val PLANNED_TICK: Duration = Duration.ofSeconds(30)
         private val TELEGRAM_INTERVAL: Duration = Duration.ofSeconds(30)
         private val TELEGRAM_INTERVAL_DARK: Duration = Duration.ofSeconds(120)
 

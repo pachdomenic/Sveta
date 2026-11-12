@@ -29,7 +29,12 @@ data class ScheduleState(
 }
 
 /** Published days for a group that differ from what we had before a refresh. */
-data class ScheduleChange(val changed: List<DaySchedule>, val added: List<DaySchedule>) {
+data class ScheduleChange(
+    val changed: List<DaySchedule>,
+    val added: List<DaySchedule>,
+    /** The subset of [changed] that had outages before and has none now. */
+    val cancelled: List<DaySchedule> = emptyList(),
+) {
     val isEmpty: Boolean get() = changed.isEmpty() && added.isEmpty()
 }
 
@@ -121,9 +126,11 @@ class ScheduleRepository(
         fun diff(old: DtekPayload, new: DtekPayload, group: String, today: LocalDate): ScheduleChange {
             val was = DtekParser.factDays(old, group).associateBy { it.date }
             val now = DtekParser.factDays(new, group).filter { !it.date.isBefore(today) }
+            val changed = now.filter { day -> was[day.date]?.let { it.slots != day.slots } == true }
             return ScheduleChange(
-                changed = now.filter { day -> was[day.date]?.let { it.slots != day.slots } == true },
+                changed = changed,
                 added = now.filter { it.date !in was },
+                cancelled = changed.filter { it.offMinutes == 0 && was.getValue(it.date).offMinutes > 0 },
             )
         }
     }

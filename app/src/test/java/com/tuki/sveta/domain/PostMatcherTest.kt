@@ -14,6 +14,29 @@ class PostMatcherTest {
     private fun match(text: String) = PostMatcher.match(text, listOf(lisova, sadova), off, on)
         .associate { it.watch.name to it.kind }
 
+    private val ownChannel = Watch("3", "Польова", emptyList())
+
+    private fun dedicated(text: String) = PostMatcher.match(text, listOf(ownChannel), off, on).map { it.kind }
+
+    @Test
+    fun `a line with its own channel needs no keywords`() {
+        assertEquals(listOf(SwitchKind.OFF), dedicated("⚡️ Світло зникло о 14:05"))
+        assertEquals(listOf(SwitchKind.ON), dedicated("💡 Світло з'явилось"))
+        assertEquals(emptyList<SwitchKind>(), dedicated("Доброго ранку! Сьогодні працюємо за графіком."))
+    }
+
+    @Test
+    fun `in a dedicated channel the first verb is the news`() {
+        assertEquals(listOf(SwitchKind.OFF), dedicated("Світло вимкнули. Обіцяють увімкнути о 18:00"))
+        assertEquals(listOf(SwitchKind.ON), dedicated("Дали світло! Не було 4 години, вимкнули о 10:00"))
+    }
+
+    @Test
+    fun `lines with and without keywords can share a channel`() {
+        val hits = PostMatcher.match("На Лісовій вимкнули світло", listOf(lisova, sadova, ownChannel), off, on).associate { it.watch.name to it.kind }
+        assertEquals(mapOf("Лісова" to SwitchKind.OFF, "Польова" to SwitchKind.OFF), hits)
+    }
+
     @Test
     fun `inflected outage post matches by stem`() {
         assertEquals(mapOf("Лісова" to SwitchKind.OFF), match("⚡️ На Лісовій вимкнули світло"))

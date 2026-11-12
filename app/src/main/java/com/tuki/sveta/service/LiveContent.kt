@@ -1,5 +1,6 @@
 package com.tuki.sveta.service
 
+import com.tuki.sveta.data.store.LiveChip
 import com.tuki.sveta.domain.GridState
 import com.tuki.sveta.domain.Overview
 import com.tuki.sveta.domain.SwitchKind
@@ -14,9 +15,9 @@ data class LiveContent(
     val title: String,
     val text: String,
     val detail: String?,
-    /** Status bar chip text; keep under 7 characters or the system drops it. */
+    /** Status bar chip text; keep under 7 characters or the system drops it. Wins over [countdownTo] in the chip. */
     val chip: String?,
-    /** When set, the chip counts down to this moment instead of showing [chip]. */
+    /** When set, the card header counts down to this moment, and so does the chip unless [chip] is set. */
     val countdownTo: Instant?,
     val progress: Float?,
     val tone: Tone,
@@ -24,13 +25,23 @@ data class LiveContent(
 
 object LiveContentBuilder {
 
-    /** @param watts also show the battery's charge or discharge power. */
-    fun build(o: Overview, watts: Boolean = false): LiveContent {
+    /**
+     * @param chip what the user wants in the status bar chip while the power is out
+     * @param watts also show the battery's charge or discharge power
+     */
+    fun build(o: Overview, chip: LiveChip = LiveChip.COUNTDOWN, watts: Boolean = false): LiveContent {
         val prediction = o.activePrediction
         return when {
             prediction != null && prediction.kind == SwitchKind.OFF -> warning(o, watts)
+            // Nothing measured and the schedule is suspended: there is honestly nothing to count down to.
+            o.emergency != null && !o.measured -> LiveContent(
+                title = "Екстрені відключення",
+                text = "Графік не діє — світло можуть вимкнути й увімкнути будь-коли",
+                detail = battery(o, charging = false, watts),
+                chip = null, countdownTo = null, progress = null, tone = Tone.WARNING,
+            )
             o.effectiveOn == true -> on(o, watts)
-            o.effectiveOn == false -> off(o, watts)
+            o.effectiveOn == false -> off(o, chip, watts)
             else -> LiveContent(
                 title = "Немає даних",
                 text = "Графік ще не завантажено, станція не відповідає",
@@ -47,6 +58,7 @@ object LiveContentBuilder {
             else -> "Світло є"
         }
         val text = when {
+            o.emergency != null -> "Екстрені відключення: графік не діє, можуть вимкнути будь-якої миті"
             o.expectation?.offSchedule == true -> "За графіком уже відключення — можуть вимкнути будь-якої миті"
             next != null -> "Вимкнуть ${Texts.at(next, o.now)} · через ${Texts.duration(Duration.between(o.now, next))}"
             else -> "Відключень за графіком не видно"
@@ -57,12 +69,12 @@ object LiveContentBuilder {
             detail = battery(o, charging = true, watts),
             chip = o.volts?.takeIf { o.measured }?.let(Texts::volts),
             countdownTo = null,
-            progress = o.progress,
+            progress = o.progress.takeIf { o.emergency == null },
             tone = if (o.measured) Tone.ON else Tone.UNKNOWN,
         )
     }
 
-    private fun off(o: Overview, watts: Boolean): LiveContent {
+    private fun off(o: Overview, wanted: LiveChip, watts: Boolean): LiveContent {
         val next = o.nextSwitch
         val restoreHint = o.activePrediction?.takeIf { it.kind == SwitchKind.ON }
         val title = when {
@@ -72,16 +84,24 @@ object LiveContentBuilder {
         }
         val text = when {
             restoreHint != null -> "«${restoreHint.trigger.watchName}» уже зі світлом — чекай ${Texts.range(restoreHint.earliest, restoreHint.latest)}"
+            o.emergency != null -> "Екстрені відключення: графік не діє, коли увімкнуть — невідомо"
             next != null -> "Увімкнуть ${Texts.at(next, o.now)} · через ${Texts.duration(Duration.between(o.now, next))}"
             else -> "Поза графіком — коли увімкнуть, невідомо"
+        }
+        val countdownTo = restoreHint?.latest ?: next.takeIf { o.emergency == null }
+        // The station may not have reported yet (or there is none): then the countdown is still the best we have.
+        val stationChip = when (wanted) {
+            LiveChip.COUNTDOWN -> null
+            LiveChip.BATTERY -> o.batteryPercent?.let { "$it%" }
+            LiveChip.RUNTIME -> o.dischargeRemainMinutes?.takeIf { it > 0 }?.let(Texts::compactMinutes)
         }
         return LiveContent(
             title = title,
             text = text,
             detail = battery(o, charging = false, watts),
-            chip = "Нема",
-            countdownTo = restoreHint?.latest ?: next,
-            progress = o.progress,
+            chip = stationChip ?: "Нема".takeIf { countdownTo == null },
+            countdownTo = countdownTo,
+            progress = o.progress.takeIf { o.emergency == null },
             tone = Tone.OFF,
         )
     }

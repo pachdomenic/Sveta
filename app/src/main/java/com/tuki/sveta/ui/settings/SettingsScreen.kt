@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,8 +27,10 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -47,7 +50,17 @@ import com.tuki.sveta.data.dtek.DtekRegion
 import com.tuki.sveta.data.dtek.PowerGroup
 import com.tuki.sveta.data.dtek.ScheduleState
 import com.tuki.sveta.data.ecoflow.Connection
+import com.tuki.sveta.data.store.LiveChip
 import com.tuki.sveta.data.store.Settings
+import com.tuki.sveta.domain.AlertPhase
+import com.tuki.sveta.domain.EmergencyStatus
+import com.tuki.sveta.domain.PlannedAlert
+import com.tuki.sveta.domain.PlannedSwitch
+import com.tuki.sveta.domain.SwitchKind
+import com.tuki.sveta.domain.Texts
+import com.tuki.sveta.service.Alerts
+import com.tuki.sveta.service.EventTexts
+import com.tuki.sveta.ui.components.ChoiceGroup
 import com.tuki.sveta.ui.components.Dot
 import com.tuki.sveta.ui.components.Hint
 import com.tuki.sveta.ui.components.SectionCard
@@ -55,7 +68,9 @@ import com.tuki.sveta.ui.components.SectionTitle
 import com.tuki.sveta.ui.components.SwitchRow
 import com.tuki.sveta.service.Tone
 import com.tuki.sveta.ui.theme.colors
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.time.Instant
 import kotlin.math.roundToInt
 
 /** Queues exist even before the first download, so the picker never shows up empty. */
@@ -110,6 +125,7 @@ fun SettingsScreen(app: AppContainer, contentPadding: PaddingValues, monitoringA
     val settings by app.settings.settings.collectAsStateWithLifecycle()
     val schedule by app.schedule.state.collectAsStateWithLifecycle()
     val station by app.ecoflow.state.collectAsStateWithLifecycle()
+    val emergencySource by app.emergency.source.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -121,12 +137,20 @@ fun SettingsScreen(app: AppContainer, contentPadding: PaddingValues, monitoringA
     var batteryExempt by remember { mutableStateOf(context.isIgnoringBatteryOptimizations()) }
     var liveUpdates by remember { mutableStateOf(app.notifications.liveUpdatesAvailable) }
     var canNotify by remember { mutableStateOf(app.notifications.canPost) }
+    var exactAlarms by remember { mutableStateOf(Alerts.exactAlarmsAllowed(context)) }
     LifecycleResumeEffect(Unit) {
         batteryExempt = context.isIgnoringBatteryOptimizations()
         liveUpdates = app.notifications.liveUpdatesAvailable
         canNotify = app.notifications.canPost
+        if (exactAlarms != Alerts.exactAlarmsAllowed(context)) {
+            exactAlarms = !exactAlarms
+            // The pending alarm was armed under the old permission.
+            scope.launch { app.alerts.syncPlanned() }
+        }
         onPauseOrDispose { }
     }
+
+    val askNotifications = rememberNotificationPermissionRequest { canNotify = app.notifications.canPost }
 
     LazyColumn(
         contentPadding = contentPadding,
@@ -186,36 +210,140 @@ fun SettingsScreen(app: AppContainer, contentPadding: PaddingValues, monitoringA
                 SectionTitle("Сповіщення", icon = Icons.Rounded.Notifications)
                 SwitchRow(
                     title = "Фоновий моніторинг",
-                    subtitle = if (monitoringActive) "Працює: жива картка в шторці та сповіщення" else "Вимкнено: дані оновлюються лише у відкритому застосунку",
+                    subtitle = if (monitoringActive) "Працює: жива картка в шторці та миттєві сповіщення" else "Вимкнено: без живої картки, графік та екстрені перевіряються раз на годину",
                     checked = settings.monitoring,
                     onChange = onMonitoring,
                 )
-                AnimatedVisibility(settings.monitoring && !canNotify) {
+                AnimatedVisibility(!canNotify) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Сповіщення заборонені в системі — картки й попереджень не буде.", color = MaterialTheme.colorScheme.error)
-                        OutlinedButton(onClick = { context.openPromotedNotificationSettings() }) { Text("Відкрити налаштування") }
+                        OutlinedButton(onClick = askNotifications) { Text("Дозволити сповіщення") }
                     }
                 }
-                SwitchRow("Світло зникло / з'явилось", settings.notifyPower, { on -> update { it.copy(notifyPower = on) } })
-                SwitchRow("Прогноз за сусідніми лініями", settings.notifyPredict, { on -> update { it.copy(notifyPredict = on) } })
-                SwitchRow("Зміни графіка ДТЕК", settings.notifySchedule, { on -> update { it.copy(notifySchedule = on) } })
                 SwitchRow(
-                    title = "Потужність у живій картці",
+                    title = "Світло зникло / з'явилось",
+                    subtitle = "Справжній момент за даними EcoFlow",
+                    checked = settings.notifyPower,
+                    onChange = { on -> update { it.copy(notifyPower = on) } },
+                )
+                SwitchRow(
+                    title = "Вимкнення й увімкнення за графіком",
+                    subtitle = "Нагадування про кожне перемикання у графіку ДТЕК, станція не потрібна",
+                    checked = settings.notifyPlanned,
+                    onChange = { on -> update { it.copy(notifyPlanned = on) } },
+                )
+                AnimatedVisibility(settings.notifyPlanned) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Hint("Попереджати заздалегідь, хв")
+                        ChoiceGroup(
+                            options = Settings.PLANNED_LEAD_OPTIONS,
+                            selected = settings.plannedLeadMinutes,
+                            onSelect = { minutes -> update { it.copy(plannedLeadMinutes = minutes) } },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { minutes -> Text(if (minutes == 0) "ні" else minutes.toString()) }
+                        if (!exactAlarms) {
+                            Hint("Без дозволу на точні будильники система може показати нагадування із запізненням.")
+                            OutlinedButton(onClick = { context.requestExactAlarms() }) { Text("Дозволити точний час") }
+                        }
+                    }
+                }
+                SwitchRow(
+                    title = "Новий або змінений графік",
+                    subtitle = "ДТЕК опублікував графік на завтра, змінив чи скасував відключення",
+                    checked = settings.notifySchedule,
+                    onChange = { on -> update { it.copy(notifySchedule = on) } },
+                )
+                SwitchRow(
+                    title = "Екстрені відключення",
+                    subtitle = "Запровадили або скасували — за дописами @${settings.emergencyChannel}",
+                    checked = settings.notifyEmergency,
+                    onChange = { on -> update { it.copy(notifyEmergency = on) } },
+                )
+                emergencySource.error?.let { Text("Канал @${settings.emergencyChannel} недоступний: $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                SwitchRow("Прогноз за сусідніми лініями", settings.notifyPredict, { on -> update { it.copy(notifyPredict = on) } })
+
+                SwitchRow(
+                    title = "Жива картка в шторці",
+                    subtitle = if (settings.liveCard) {
+                        "Вимикач ховає картку назовсім, кнопка «Сховати» на самій картці — на час або до події"
+                    } else {
+                        "Сховано: моніторинг і сповіщення працюють, у шторці лишається тихий рядок, який можна змахнути"
+                    },
+                    checked = settings.liveCard,
+                    onChange = { on -> update { if (on) it.liveCardShown() else it.copy(liveCard = false, liveHiddenUntil = 0) } },
+                    enabled = settings.monitoring,
+                )
+                if (settings.liveCard) {
+                    Hint("Кнопка «Сховати» ховає картку на")
+                    ChoiceGroup(
+                        options = Settings.LIVE_HIDE_OPTIONS,
+                        selected = settings.liveHideMinutes,
+                        onSelect = { minutes -> update { it.copy(liveHideMinutes = minutes) } },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { minutes -> Text(if (minutes == Settings.HIDE_UNTIL_EVENT) "подія" else Texts.minutes(minutes), maxLines = 1) }
+                    if (settings.liveHideMinutes == Settings.HIDE_UNTIL_EVENT) {
+                        Hint("До події: картка повернеться, щойно світло вимкнуть чи увімкнуть, запровадять або скасують екстрені відключення чи з'явиться прогноз за сусідами.")
+                    }
+
+                    // Ticks only while the card is put away, to notice the moment it comes back.
+                    var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+                    LaunchedEffect(settings.liveHiddenUntil) {
+                        while (true) {
+                            nowMillis = System.currentTimeMillis()
+                            val left = settings.liveHiddenUntil - nowMillis
+                            if (left <= 0 || settings.liveHiddenUntil == Settings.UNTIL_EVENT) break
+                            delay(minOf(left, 30_000L))
+                        }
+                    }
+                    if (!settings.liveCardVisible(nowMillis)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                if (settings.liveHiddenUntil == Settings.UNTIL_EVENT) "Зараз сховано до наступної події"
+                                else "Зараз сховано, повернеться ${Texts.at(Instant.ofEpochMilli(settings.liveHiddenUntil), Instant.ofEpochMilli(nowMillis))}",
+                                Modifier.weight(1f).padding(end = 12.dp),
+                            )
+                            OutlinedButton(onClick = { update { it.liveCardShown() } }) { Text("Показати") }
+                        }
+                    }
+                }
+                if (settings.liveCard) SwitchRow(
+                    title = "Потужність у картці",
                     subtitle = "Скільки ват іде в батарею під час заряду або з неї під час розряду",
                     checked = settings.liveWatts,
                     onChange = { on -> update { it.copy(liveWatts = on) } },
                 )
-
-                Text(
+                if (settings.liveCard) Text(
                     when {
                         Build.VERSION.SDK_INT < 36 -> "Live Updates з'явились в Android 16. На цій версії показується звичайна постійна картка."
-                        liveUpdates -> "Live Updates увімкнено: картка закріплена, у рядку стану — вольтаж або відлік."
+                        liveUpdates -> "Live Updates увімкнено: картка закріплена, у рядку стану — вольтаж, а без світла те, що обрано нижче."
                         else -> "Live Updates вимкнено в системі для цього застосунку."
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (Build.VERSION.SDK_INT >= 36) {
+                if (Build.VERSION.SDK_INT >= 36 && settings.liveCard) {
+                    Hint("У рядку стану, коли світла немає")
+                    ChoiceGroup(
+                        options = LiveChip.entries,
+                        selected = settings.liveChip,
+                        onSelect = { choice -> update { it.copy(liveChip = choice) } },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { choice ->
+                        Text(
+                            when (choice) {
+                                LiveChip.COUNTDOWN -> "Відлік"
+                                LiveChip.BATTERY -> "Заряд"
+                                LiveChip.RUNTIME -> "Залишок"
+                            }
+                        )
+                    }
+                    Hint(
+                        when (settings.liveChip) {
+                            LiveChip.COUNTDOWN -> "Час до увімкнення за графіком."
+                            LiveChip.BATTERY -> "Заряд EcoFlow у відсотках. Відлік до увімкнення лишається в самій картці."
+                            LiveChip.RUNTIME -> "На скільки вистачить EcoFlow за поточного навантаження. Відлік до увімкнення лишається в самій картці."
+                        }
+                    )
                     OutlinedButton(onClick = { context.openPromotedNotificationSettings() }) { Text("Налаштування Live Updates") }
                 }
             }
@@ -252,6 +380,24 @@ private fun Diagnostics(app: AppContainer, raw: Map<String, String>) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { app.ecoflow.simulateVoltage(0.0) }) { Text("Зникло") }
                         OutlinedButton(onClick = { app.ecoflow.simulateVoltage(229.0) }) { Text("З'явилось") }
+                    }
+                    Hint("Зразки сповіщень:")
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val now = Instant.now()
+                        val sample = EmergencyStatus(true, now.toEpochMilli(), now.toEpochMilli(), "Київська область: за командою Укренерго запроваджені екстрені відключення", "dtek_ua")
+                        OutlinedButton(onClick = {
+                            val text = EventTexts.emergency(sample, app.overview.current())
+                            app.notifications.emergency(text.title, text.text, active = true)
+                        }) { Text("Екстрені") }
+                        OutlinedButton(onClick = {
+                            val text = EventTexts.emergency(sample.copy(active = false, summary = "Київщина: повертаємось до графіків, екстрені відключення скасовано"), app.overview.current())
+                            app.notifications.emergency(text.title, text.text, active = false)
+                        }) { Text("Скасовано") }
+                        OutlinedButton(onClick = {
+                            val switch = PlannedSwitch(now.plusSeconds(15 * 60), SwitchKind.OFF, now.plusSeconds(4 * 3600 + 15 * 60))
+                            val text = EventTexts.planned(PlannedAlert(switch, AlertPhase.AHEAD, now), now)
+                            app.notifications.planned(text.title, text.text, off = true)
+                        }) { Text("За графіком") }
                     }
                 }
                 val interesting = raw.filterKeys { it.startsWith("inv.") || it.startsWith("pd.watts") || it.startsWith("ems.") && it.endsWith("RemainTime") || it.endsWith("soc", ignoreCase = true) }

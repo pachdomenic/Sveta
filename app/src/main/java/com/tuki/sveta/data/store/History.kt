@@ -1,5 +1,7 @@
 package com.tuki.sveta.data.store
 
+import com.tuki.sveta.domain.EmergencyKind
+import com.tuki.sveta.domain.EmergencyStatus
 import com.tuki.sveta.domain.SwitchKind
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -10,6 +12,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -46,6 +49,12 @@ data class History(
     val misses: Map<String, Int> = emptyMap(),
     /** channel -> highest post id already processed. */
     val seenPosts: Map<String, Long> = emptyMap(),
+    /** Last known word on emergency outages. */
+    val emergency: EmergencyStatus? = null,
+    /** Announcement post id -> what it said when we last read it; posts get edited in place. */
+    val emergencyPosts: Map<Long, EmergencyKind> = emptyMap(),
+    /** Keys of schedule reminders already shown, oldest first. */
+    val plannedHandled: List<String> = emptyList(),
 )
 
 /** Small append-mostly log kept as one JSON file; lists are capped so it never grows unbounded. */
@@ -64,12 +73,21 @@ class HistoryStore(private val file: File, private val scope: CoroutineScope) {
             writeLock.withLock {
                 // Skip stale snapshots if a newer one is already queued behind us.
                 if (snapshot !== _history.value) return@withLock
-                runCatching {
-                    val tmp = File(file.parentFile, file.name + ".tmp")
-                    tmp.writeText(json.encodeToString(History.serializer(), snapshot))
-                    tmp.renameTo(file)
-                }
+                write(snapshot)
             }
+        }
+    }
+
+    /** Waits until the current state is on disk; for callers that may be killed right after. */
+    suspend fun flush() = withContext(Dispatchers.IO) {
+        writeLock.withLock { write(_history.value) }
+    }
+
+    private fun write(snapshot: History) {
+        runCatching {
+            val tmp = File(file.parentFile, file.name + ".tmp")
+            tmp.writeText(json.encodeToString(History.serializer(), snapshot))
+            tmp.renameTo(file)
         }
     }
 
@@ -80,11 +98,13 @@ class HistoryStore(private val file: File, private val scope: CoroutineScope) {
         power = power.take(MAX_POWER),
         matches = matches.take(MAX_MATCHES),
         lags = lags.mapValues { it.value.takeLast(MAX_LAGS) },
+        plannedHandled = plannedHandled.takeLast(MAX_PLANNED),
     )
 
     private companion object {
         const val MAX_POWER = 200
         const val MAX_MATCHES = 100
         const val MAX_LAGS = 30
+        const val MAX_PLANNED = 40
     }
 }

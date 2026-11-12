@@ -4,7 +4,11 @@ import com.tuki.sveta.data.dtek.DtekFetch
 import com.tuki.sveta.data.dtek.DtekParser
 import com.tuki.sveta.data.dtek.DtekRegion
 import com.tuki.sveta.data.dtek.MirrorDtekSource
+import com.tuki.sveta.data.store.Settings
 import com.tuki.sveta.data.telegram.TelegramChannelScraper
+import com.tuki.sveta.domain.Bulletin
+import com.tuki.sveta.domain.EmergencyMatcher
+import com.tuki.sveta.domain.EmergencyTracker
 import com.tuki.sveta.domain.KyivZone
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
@@ -68,6 +72,20 @@ class LiveSourcesTest {
         assertEquals(posts.sortedBy { it.id }, posts)
         assertTrue(posts.all { it.text.isNotBlank() && it.at.isBefore(Instant.now().plusSeconds(300)) })
         println("Telegram ok: ${posts.size} posts, latest #${posts.last().id} at ${posts.last().at}")
+    }
+
+    @Test
+    fun `emergency announcements channel is readable`() = runBlocking {
+        val posts = TelegramChannelScraper(http).latest(Settings.DEFAULT_EMERGENCY_CHANNEL)
+        assertTrue("expected several posts, got ${posts.size}", posts.size >= 3)
+        // Nothing to assert about the verdicts (it depends on the day), but the output shows at a glance
+        // whether the matcher still understands how DTEK words things.
+        for (post in posts) {
+            val notice = EmergencyMatcher.match(post.text)
+            println("#${post.id} ${post.at} ${notice?.kind ?: "-"}: ${post.text.lineSequence().first().take(90)}")
+        }
+        val step = EmergencyTracker.step(null, emptyMap(), posts.map { Bulletin(it.id, it.at, it.text) }, Settings.DEFAULT_EMERGENCY_CHANNEL, Instant.now())
+        println("Emergency now: ${EmergencyTracker.current(step.status, Instant.now())}")
     }
 
     @Test

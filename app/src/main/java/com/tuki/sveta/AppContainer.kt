@@ -10,12 +10,18 @@ import com.tuki.sveta.data.ecoflow.EcoflowRepository
 import com.tuki.sveta.data.store.HistoryStore
 import com.tuki.sveta.data.store.SecretStore
 import com.tuki.sveta.data.store.SettingsStore
+import com.tuki.sveta.data.telegram.EmergencyRepository
 import com.tuki.sveta.data.telegram.TelegramChannelScraper
 import com.tuki.sveta.data.telegram.TelegramRepository
+import com.tuki.sveta.service.Alerts
 import com.tuki.sveta.service.Notifications
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okhttp3.OkHttpClient
@@ -39,10 +45,23 @@ class AppContainer(context: Context) {
 
     val schedule = ScheduleRepository(MirrorDtekSource(http), File(context.filesDir, "dtek"))
     val ecoflow = EcoflowRepository(EcoflowAuthApi(http), settings, secrets, history, scope)
-    val telegram = TelegramRepository(TelegramChannelScraper(http), settings, history)
+    private val scraper = TelegramChannelScraper(http)
+    val telegram = TelegramRepository(scraper, settings, history)
+    val emergency = EmergencyRepository(scraper, settings, history)
 
-    val overview = OverviewSource(schedule, ecoflow, telegram, settings, scope)
+    val overview = OverviewSource(schedule, ecoflow, telegram, emergency, history, settings, scope)
     val notifications = Notifications(context.applicationContext)
+    val alerts = Alerts(context.applicationContext, schedule, emergency, ecoflow, overview, settings, history, notifications)
+
+    init {
+        // Re-arms the schedule reminders on every process start and whenever what they depend on changes.
+        scope.launch {
+            settings.settings
+                .map { listOf(it.onboarded, it.region, it.group, it.notifyPlanned, it.plannedLeadMinutes) }
+                .distinctUntilChanged()
+                .collectLatest { alerts.syncPlanned() }
+        }
+    }
 
     /** Quick taps on several regions must finish in the order they were made, or the last download wins instead of the last tap. */
     private val regionSwitch = Mutex()
@@ -53,7 +72,8 @@ class AppContainer(context: Context) {
      */
     suspend fun selectRegion(region: DtekRegion) = regionSwitch.withLock {
         settings.update { it.copy(region = region.id) }
-        schedule.refresh(region, settings.settings.value.group)
+        // Through alerts, so the reminders are re-armed for the new region's schedule once it is in.
+        alerts.refreshSchedule(region, settings.settings.value.group)
         val groups = schedule.state.value.payloadFor(region)?.let(DtekParser::groups).orEmpty()
         if (groups.isNotEmpty()) {
             settings.update { current ->

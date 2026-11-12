@@ -65,6 +65,7 @@ import com.tuki.sveta.service.LiveContentBuilder
 import com.tuki.sveta.service.Tone
 import com.tuki.sveta.ui.components.DayStrip
 import com.tuki.sveta.ui.components.Dot
+import com.tuki.sveta.ui.components.EmergencyBanner
 import com.tuki.sveta.ui.components.Hint
 import com.tuki.sveta.ui.components.SectionCard
 import com.tuki.sveta.ui.components.SectionTitle
@@ -88,7 +89,7 @@ fun HomeScreen(
     val settings by app.settings.settings.collectAsStateWithLifecycle()
     val history by app.history.history.collectAsStateWithLifecycle()
     val schedule by app.schedule.state.collectAsStateWithLifecycle()
-    val content = LiveContentBuilder.build(overview, settings.liveWatts)
+    val content = LiveContentBuilder.build(overview, settings.liveChip, settings.liveWatts)
 
     LazyColumn(
         contentPadding = contentPadding,
@@ -96,6 +97,10 @@ fun HomeScreen(
         modifier = Modifier.padding(horizontal = 16.dp),
     ) {
         item { Hero(overview, content) }
+
+        overview.emergency?.let { emergency ->
+            item { EmergencyBanner(emergency, overview.now) }
+        }
 
         overview.activePrediction?.takeIf { it.kind == SwitchKind.OFF }?.let { p ->
             item {
@@ -146,7 +151,8 @@ private fun Hero(overview: Overview, content: LiveContent) {
                     AnimatedContent(heroTitle(overview), label = "heroTitle") { title ->
                         Text(title, style = MaterialTheme.typography.headlineLargeEmphasized)
                     }
-                    overview.since?.let { since ->
+                    // With the schedule suspended and nothing measured there is no "since" to speak of.
+                    overview.since?.takeIf { overview.measured || overview.emergency == null }?.let { since ->
                         val word = if (overview.measured) "вже" else "за графіком уже"
                         Text("$word ${Texts.duration(Duration.between(since, overview.now))}", style = MaterialTheme.typography.bodyLarge)
                     }
@@ -169,6 +175,7 @@ private fun Hero(overview: Overview, content: LiveContent) {
 }
 
 private fun heroTitle(o: Overview): String = when {
+    !o.measured && o.emergency != null -> "Графік не діє"
     !o.measured && o.effectiveOn == null -> "Немає даних"
     !o.measured && o.effectiveOn == true -> "Має бути світло"
     !o.measured -> "Має бути темно"
@@ -233,6 +240,7 @@ private fun NextSwitchCard(overview: Overview, content: LiveContent, loading: Bo
 
             else -> {
                 val goingOff = overview.effectiveOn == true
+                if (overview.emergency != null) Hint("Це за графіком, а він зараз не виконується.")
                 Text(
                     when {
                         next == null && overview.expectation?.offSchedule == true && goingOff -> "Відключення запізнюється"

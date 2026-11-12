@@ -13,6 +13,9 @@ data class RuleHit(val watch: Watch, val kind: SwitchKind)
  * Decides whether a channel post says that one of the watched neighbour lines went dark or came back.
  * Matching is plain case-insensitive substring search on word stems, which copes well with Ukrainian
  * inflection ("вимкнули", "вимкнено", "вимкнення").
+ *
+ * A watch without keywords stands for a channel that is about one line only: there every post with an
+ * outage or restore word is about that line.
  */
 object PostMatcher {
 
@@ -23,8 +26,16 @@ object PostMatcher {
         if (off.isEmpty() && on.isEmpty()) return emptyList()
 
         return watches.mapNotNull { watch ->
-            val at = watch.keywords
-                .map(::normalize).filter { it.isNotBlank() }
+            val keywords = watch.keywords.map(::normalize).filter { it.isNotBlank() }
+            if (keywords.isEmpty()) {
+                // Nothing to measure distance from, so the first verb is the news:
+                // "Світло зникло. Увімкнуть орієнтовно о 18:00" is an outage.
+                val firstOff = off.minOrNull()
+                val firstOn = on.minOrNull()
+                val kind = if (firstOn == null || (firstOff != null && firstOff <= firstOn)) SwitchKind.OFF else SwitchKind.ON
+                return@mapNotNull RuleHit(watch, kind)
+            }
+            val at = keywords
                 .flatMap { occurrences(haystack, it) }
                 .ifEmpty { return@mapNotNull null }
             // A post may report both ("Садову увімкнули, Лісову вимкнули"): the verb closest to the

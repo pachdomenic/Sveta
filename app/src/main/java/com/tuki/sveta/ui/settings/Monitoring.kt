@@ -44,6 +44,26 @@ fun rememberMonitoringToggle(app: AppContainer): (Boolean) -> Unit {
     }
 }
 
+/**
+ * Asks for the notification permission where the system still shows the dialog, and falls back to the
+ * app's notification settings where it no longer does (already denied twice, or Android 12 and older).
+ */
+@Composable
+fun rememberNotificationPermissionRequest(onResult: () -> Unit): () -> Unit {
+    val context = LocalContext.current
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) context.openNotificationSettings()
+        onResult()
+    }
+    return {
+        if (Build.VERSION.SDK_INT >= 33) permission.launch(Manifest.permission.POST_NOTIFICATIONS) else context.openNotificationSettings()
+    }
+}
+
+fun Context.openNotificationSettings() {
+    runCatching { startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)) }
+}
+
 fun Context.isIgnoringBatteryOptimizations(): Boolean =
     getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
 
@@ -53,6 +73,13 @@ fun Context.requestIgnoreBatteryOptimizations() {
     val direct = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, "package:$packageName".toUri())
     runCatching { startActivity(direct) }
         .onFailure { runCatching { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } }
+}
+
+/** Android 12+: lets the schedule reminders fire on the minute instead of "sometime around". */
+fun Context.requestExactAlarms() {
+    if (Build.VERSION.SDK_INT < 31) return
+    runCatching { startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, "package:$packageName".toUri())) }
+        .onFailure { runCatching { startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)) } }
 }
 
 fun Context.openPromotedNotificationSettings() {

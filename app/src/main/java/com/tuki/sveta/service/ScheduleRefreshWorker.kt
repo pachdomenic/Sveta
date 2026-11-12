@@ -9,12 +9,11 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.tuki.sveta.container
-import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 /**
- * Hourly safety net: keeps the schedule fresh and reports changes even when the foreground service is
- * not running, and tries to revive the service if the system killed it.
+ * Hourly safety net: keeps the schedule fresh, looks for emergency outages and reports both even when
+ * the foreground service is not running, and tries to revive the service if the system killed it.
  */
 class ScheduleRefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
@@ -26,12 +25,8 @@ class ScheduleRefreshWorker(context: Context, params: WorkerParameters) : Corout
         }
         if (MonitorService.isRunning.value) return Result.success()
 
-        val change = app.schedule.refresh(settings.dtekRegion, settings.group)
-        if (change != null && !change.isEmpty && settings.notifySchedule) {
-            app.notifications.ensureChannels()
-            val text = EventTexts.schedule(change, Instant.now())
-            app.notifications.scheduleChanged(text.title, text.text)
-        }
+        app.alerts.refreshSchedule(settings.dtekRegion, settings.group)
+        app.alerts.checkEmergency()
         return if (app.schedule.state.value.error == null) Result.success() else Result.retry()
     }
 
