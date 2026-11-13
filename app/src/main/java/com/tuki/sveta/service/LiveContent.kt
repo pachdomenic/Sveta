@@ -142,14 +142,16 @@ object LiveContentBuilder {
     }
 
     /**
-     * What flows into or out of the battery: total input minus total output, so a load running through
-     * from the grid is not counted as charging. Small differences are inverter losses, not real flow.
+     * Charging shows what goes into the battery: total input minus total output, so a load running through
+     * from the grid is not counted as charging. Discharging shows the whole output, i.e. what the load draws,
+     * even if some input (solar, a weak grid) covers part of it. Small differences are inverter losses.
      */
     private fun power(o: Overview, percent: Int): String? {
-        val net = (o.inputWatts ?: return null) - (o.outputWatts ?: return null)
+        val output = o.outputWatts ?: return null
+        val net = (o.inputWatts ?: return null) - output
         return when {
             net >= POWER_NOISE_WATTS && percent < 100 -> "заряд ${Texts.watts(net)}"
-            net <= -POWER_NOISE_WATTS -> "розряд ${Texts.watts(-net)}"
+            net <= -POWER_NOISE_WATTS -> "розряд ${Texts.watts(output)}"
             else -> null
         }
     }
