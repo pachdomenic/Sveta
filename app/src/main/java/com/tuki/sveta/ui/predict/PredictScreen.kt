@@ -53,8 +53,10 @@ import com.tuki.sveta.data.telegram.ChannelStatus
 import com.tuki.sveta.data.telegram.TelegramParser
 import com.tuki.sveta.domain.GridState
 import com.tuki.sveta.domain.LagWindow
+import com.tuki.sveta.domain.PostMatcher
 import com.tuki.sveta.domain.SwitchKind
 import com.tuki.sveta.domain.Texts
+import com.tuki.sveta.domain.Watch
 import com.tuki.sveta.domain.lagKey
 import com.tuki.sveta.service.Tone
 import com.tuki.sveta.ui.components.Dot
@@ -192,8 +194,17 @@ fun PredictScreen(app: AppContainer, contentPadding: PaddingValues) {
                         ) { Text("Перевірити зараз") }
                     }
                 }
-                if (history.matches.isEmpty()) Hint("Поки що жоден допис не збігся з твоїми лініями.")
-                history.matches.take(8).forEach { match ->
+                // Matches are re-read with today's rules and words, so posts an older, looser matcher let
+                // through (news, schedules, warnings) drop out of the list instead of lingering.
+                val matches = remember(history.matches, settings.rules, settings.offWords, settings.onWords) {
+                    history.matches.mapNotNull { match ->
+                        val rule = settings.rules.firstOrNull { it.id == match.ruleId } ?: return@mapNotNull match
+                        PostMatcher.match(match.text, listOf(Watch(rule.id, rule.name, rule.keywords)), settings.offWords, settings.onWords)
+                            .firstOrNull()?.let { match.copy(kind = it.kind) }
+                    }
+                }
+                if (matches.isEmpty()) Hint("Поки що жоден допис не збігся з твоїми лініями.")
+                matches.take(8).forEach { match ->
                     Row {
                         Dot((if (match.kind == SwitchKind.OFF) Tone.OFF else Tone.ON).colors().accent, Modifier.padding(top = 6.dp))
                         Spacer(Modifier.width(10.dp))

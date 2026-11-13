@@ -75,4 +75,61 @@ class PostMatcherTest {
     fun `any keyword of a watch is enough`() {
         assertEquals(mapOf("Лісова" to SwitchKind.OFF), match("Лесная — знеструмлено"))
     }
+
+    @Test
+    fun `apostrophe style does not matter at all`() {
+        for (text in listOf("Світло з'явилося", "Світло з’явилося", "Світло зʼявилося", "Світло з‘явилося", "Світло зявилося")) {
+            assertEquals(text, listOf(SwitchKind.ON), dedicated(text))
+        }
+    }
+
+    @Test
+    fun `bot status posts are read by their headline`() {
+        assertEquals(listOf(SwitchKind.ON), dedicated("🟢 20:02 Світло з'явилося\n🕓 Його не було 6год 33хв\n🗓️ Наступне планове: 22:00 - 00:00"))
+        assertEquals(listOf(SwitchKind.OFF), dedicated("🔴 21:55 Світло зникло\n🕓 Воно було 1год 53хв\n🗓️ Очікуємо за розкладом о 02:00"))
+    }
+
+    @Test
+    fun `warnings schedules and news in a line channel are not switches`() {
+        // Words a user might add on top of the defaults, to show the filter is not just a short list.
+        val off = off + listOf("відсутн", "не було", "виключ")
+        val on = on + listOf("включ", "відновлен")
+        val noise = listOf(
+            "⏰ Через 15 хв планове відключення",
+            "⚠️Екстрені відключення у Бучанському районі з 10:40\nСвітла може не бути поза графіком.",
+            "🚨Увага! З 10:40 у Бучанському районі ДТЕК застосовує екстрені відключення\nСвітла може не бути поза графіком.",
+            "Графік відключень на п'ятницю, 13 листопада\n💡Група 4.1\n02:00 - 05:30 (3,5 год.)",
+            "Заплановані ремонтні роботи.\n\n🕦 Час початку: 20.11.2026 08:00.\nВ цей час електроенергія буде відсутня.",
+            "Частина Київщини може залишатися без світла до 18-20 годин через аварію на лінії 110 кВ.\n\n" +
+                "За інформацією ДТЕК, аварійне відключення охопило частину Фастівського, Бучанського та Обухівського районів.",
+            "10 енергооб’єктів пошкоджено за тиждень: чому на Київщині тривають відключення світла\n\n" +
+                "Наші енергетики чотири доби повертали світло понад 203 тисячам родин. Щодня над відновленням працюють понад 200 бригад.",
+            "❓ Чому немає світла?\n❓ Коли увімкнуть електроенергію?\n❓ Чому відключили поза графіком?",
+            "Просимо утриматися від їх використання або користуватися ними виключно на власний ризик.",
+            "Тому графік працює як черга: щоб подати світло одним споживачам, потрібно знеструмити інших. " +
+                "Вимкнення відбувається точно за часом. Увімкнення проводять поетапно.",
+            "Будь ласка, не вимикайте потужні прилади хоча б 30 хв",
+            "Світло не відключали, це планові роботи на сусідній вулиці",
+        )
+        for (text in noise) {
+            assertEquals(text, emptyList<RuleHit>(), PostMatcher.match(text, listOf(ownChannel), off, on))
+        }
+        assertEquals(
+            listOf(SwitchKind.ON),
+            PostMatcher.match("🟢 20:02 Світло з'явилося\n🕓 Його не було 6год 33хв", listOf(ownChannel), off, on).map { it.kind },
+        )
+    }
+
+    @Test
+    fun `a report followed by a forecast is still a report`() {
+        assertEquals(listOf(SwitchKind.OFF), dedicated("Світло зникло, можуть увімкнути о 18:00"))
+        assertEquals(listOf(SwitchKind.ON), dedicated("Світло з'явилось! Наступне відключення буде о 22:00"))
+    }
+
+    @Test
+    fun `filters apply to lines named by keywords too`() {
+        assertTrue(match("На Лісовій можуть вимкнути світло о 18:00").isEmpty())
+        assertTrue(match("Графік відключень для Садової").isEmpty())
+        assertEquals(mapOf("Лісова" to SwitchKind.OFF), match("Лісова: світло зникло. Садову вимкнуть о 18:00"))
+    }
 }
