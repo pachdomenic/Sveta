@@ -79,7 +79,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.name }}
           VERSION_CODE: ${{ steps.version.outputs.code }}
         run: |
-          ./gradlew testReleaseUnitTest assembleRelease --no-configuration-cache \
+          ./gradlew testDebugUnitTest assembleRelease --no-configuration-cache \
             -Psveta.versionName="$VERSION" -Psveta.versionCode="$VERSION_CODE"
           cp app/build/outputs/apk/release/app-release.apk "Sveta-$VERSION.apk"
 
