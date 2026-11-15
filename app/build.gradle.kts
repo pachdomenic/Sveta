@@ -4,6 +4,9 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// CI передає ключ релізу через SVETA_KEYSTORE_*; без нього реліз підписується debug-ключем.
+val releaseKeystore = providers.environmentVariable("SVETA_KEYSTORE_FILE").orNull?.takeIf { it.isNotBlank() }
+
 android {
     namespace = "com.tuki.sveta"
     compileSdk {
@@ -14,8 +17,21 @@ android {
         applicationId = "com.tuki.sveta"
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        // Реліз у CI бере версію з тегу: -Psveta.versionName=0.2.0 -Psveta.versionCode=2000.
+        versionCode = providers.gradleProperty("sveta.versionCode").orNull?.toInt() ?: 1
+        versionName = providers.gradleProperty("sveta.versionName").orNull ?: "0.1.0"
+    }
+
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                val storePass = providers.environmentVariable("SVETA_KEYSTORE_PASSWORD").get()
+                storeFile = file(releaseKeystore)
+                storePassword = storePass
+                keyAlias = providers.environmentVariable("SVETA_KEY_ALIAS").get()
+                keyPassword = providers.environmentVariable("SVETA_KEY_PASSWORD").orNull?.takeIf { it.isNotBlank() } ?: storePass
+            }
+        }
     }
 
     buildTypes {
@@ -23,7 +39,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (releaseKeystore != null) "release" else "debug")
         }
     }
 

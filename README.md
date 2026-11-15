@@ -30,9 +30,39 @@ EcoFlow і попередження «скоро вимкнуть» за доп�
 
 ```bash
 ./gradlew assembleDebug        # app/build/outputs/apk/debug/app-debug.apk
-./gradlew assembleRelease      # мінімізована збірка, підписана debug-ключем
+./gradlew assembleRelease      # мінімізована збірка; локально підписана debug-ключем
 adb install -r app/build/outputs/apk/release/app-release.apk
 ```
+
+## Релізи
+
+Реліз збирає GitHub Actions (`.github/workflows/release.yml`): проганяє юніт-тести, збирає мінімізований APK
+і публікує його в [Releases](https://github.com/pachdomenic/Sveta/releases) як `Sveta-<версія>.apk`.
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+Або без консолі: Actions → Release → Run workflow і вказати версію — тег створиться сам на вибраній гілці.
+Версія береться з тегу: `versionName` — це `0.2.0`, `versionCode` — `2000` (`major·1000000 + minor·1000 + patch`).
+Тег із суфіксом (`v0.2.0-rc1`) публікується як pre-release.
+
+Щоб нову версію можна було поставити поверх старої, усі релізи мають бути підписані одним ключем. Він задається
+секретами репозиторію (Settings → Secrets and variables → Actions):
+
+| Секрет | Що це |
+|---|---|
+| `RELEASE_KEYSTORE_BASE64` | сховище ключів у base64: `base64 -w0 release.keystore` |
+| `RELEASE_KEYSTORE_PASSWORD` | пароль сховища |
+| `RELEASE_KEY_ALIAS` | назва ключа |
+| `RELEASE_KEY_PASSWORD` | пароль ключа; можна не задавати, якщо збігається з паролем сховища |
+
+```bash
+keytool -genkeypair -v -keystore release.keystore -alias sveta -keyalg RSA -keysize 4096 -validity 10000
+```
+
+Без секретів реліз підписується тимчасовим debug-ключем, щоразу новим: такий APK встановлюється лише після
+видалення попередньої версії, про що попереджає опис релізу.
 
 ## Перевірка
 

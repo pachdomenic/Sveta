@@ -1,0 +1,98 @@
+name: Release
+
+# Реліз збирається з тегу vX.Y.Z (git push origin v0.2.0)
+# або вручну: Actions → Release → Run workflow, де вказується версія — тег створиться сам.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Версія без «v», наприклад 0.2.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Версія
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            name="${INPUT_VERSION#v}"
+            if git ls-remote --exit-code --tags origin "refs/tags/v$name" >/dev/null; then
+              echo "::error::Тег v$name уже існує — вкажи іншу версію."
+              exit 1
+            fi
+          else
+            name="${GITHUB_REF_NAME#v}"
+          fi
+          if ! [[ "$name" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::«$name» не схоже на версію X.Y.Z"
+            exit 1
+          fi
+          # 1.2.3 → 1002003: кожна наступна версія має більший versionCode, тож оновлення ставиться поверх.
+          code=$(( 10#${BASH_REMATCH[1]} * 1000000 + 10#${BASH_REMATCH[2]} * 1000 + 10#${BASH_REMATCH[3]} ))
+          {
+            echo "name=$name"
+            echo "code=$code"
+            echo "prerelease=${BASH_REMATCH[4]:+true}"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Ключ підпису
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+            echo "SVETA_KEYSTORE_FILE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Секрет RELEASE_KEYSTORE_BASE64 не задано: APK підписано тимчасовим debug-ключем і поверх попередньої версії він не встановиться."
+          fi
+
+      - name: Тести й збірка
+        env:
+          SVETA_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          SVETA_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          SVETA_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          VERSION: ${{ steps.version.outputs.name }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+        run: |
+          ./gradlew testReleaseUnitTest assembleRelease --no-configuration-cache \
+            -Psveta.versionName="$VERSION" -Psveta.versionCode="$VERSION_CODE"
+          cp app/build/outputs/apk/release/app-release.apk "Sveta-$VERSION.apk"
+
+      - name: Реліз
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.name }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+          SIGNED: ${{ steps.signing.outputs.signed }}
+        run: |
+          args=(--title "Свєта $VERSION" --target "$GITHUB_SHA" --generate-notes)
+          if [ "$PRERELEASE" = "true" ]; then args+=(--prerelease); fi
+          if [ "$SIGNED" != "true" ]; then
+            args+=(--notes "> APK підписано тимчасовим ключем: перед встановленням попередню версію доведеться видалити.")
+          fi
+          gh release create "v$VERSION" "Sveta-$VERSION.apk" "${args[@]}"
